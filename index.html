@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="es" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>ChronosHub V4.6 - Cloud Edition</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#0f172a', surface: '#1e293b', border: '#334155' }
+                    },
+                    animation: {
+                        'pop-in': 'popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                        'fade-in': 'fadeIn 0.3s ease-out forwards'
+                    },
+                    keyframes: {
+                        popIn: {
+                            '0%': { transform: 'scale(0.9)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; overflow: hidden; user-select: none; }
+        
+        input, textarea, [contenteditable] {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            cursor: text;
+        }
+
+        /* HUB STYLES */
+        .hub-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 1.5rem;
+            padding: 2rem;
+        }
+        .hub-item {
+            position: relative;
+            aspect-ratio: 1/1.1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 1rem;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .hub-item:hover {
+            transform: translateY(-4px);
+            background-color: white;
+            border-color: #e2e8f0;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+        }
+        .dark .hub-item:hover {
+            background-color: #1e293b;
+            border-color: #334155;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+        }
+        .hub-delete-btn {
+            position: absolute;
+            top: 8px; right: 8px; width: 28px; height: 28px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            background: rgba(239, 68, 68, 0.1); color: #ef4444; opacity: 0; transition: opacity 0.2s;
+        }
+        .hub-item:hover .hub-delete-btn { opacity: 1; }
+        .hub-delete-btn:hover { background: #ef4444; color: white; }
+
+        /* TIMELINE STYLES */
+        .ruler-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 50px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid #cbd5e1;
+            z-index: 20; pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+        .dark .ruler-container { background: rgba(15, 23, 42, 0.95); border-color: #334155; }
+
+        .ruler-tick {
+            position: absolute; bottom: 8px;
+            border-left: 1px solid #94a3b8;
+            height: 12px; font-size: 11px; padding-left: 4px; 
+            color: #64748b; font-weight: 600;
+            display: flex; align-items: flex-end;
+        }
+        .dark .ruler-tick { color: #94a3b8; border-color: #475569; }
+
+        .grid-line {
+            position: absolute; top: 50px; bottom: 0; border-left: 1px dashed rgba(0,0,0,0.05);
+            pointer-events: none; z-index: 0;
+        }
+        .dark .grid-line { border-left-color: rgba(255,255,255,0.05); }
+
+        .event-card {
+            position: absolute; 
+            height: 42px; 
+            border-radius: 6px;
+            display: flex; align-items: center; padding: 0 8px 0 4px;
+            cursor: grab; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 10; border-left: 4px solid transparent; 
+            transition: box-shadow 0.2s;
+            white-space: nowrap; 
+            overflow: hidden;
+        }
+        .event-card:active { cursor: grabbing; }
+        .dark .event-card { background: #1e293b; color: white; border: 1px solid #334155; border-left-width: 4px; }
+
+        .event-card:hover {
+            z-index: 100 !important; height: auto; width: auto !important;
+            overflow: visible;
+            min-width: 250px; max-width: 320px; padding: 0; border-radius: 8px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); transform: translateY(-2px);
+            border-left: none;
+        }
+        .dark .event-card:hover { border: none; }
+        
+        .card-preview { 
+            display: flex; flex-direction: column; justify-content: center; 
+            width: 100%; height: 100%; padding-left: 2px; line-height: 1.1; 
+        }
+        .card-preview-row { display: flex; align-items: center; width: 100%; }
+        .card-title-preview { font-size: 11px; font-weight: 600; margin-right: 4px; }
+        .card-date-preview { font-size: 9px; opacity: 0.7; }
+        .card-img-thumb { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; margin-right: 4px; flex-shrink: 0; }
+
+        .card-details { display: none; flex-direction: column; width: 100%; animation: pop-in 0.2s; }
+        .event-card:hover .card-preview { display: none; }
+        .event-card:hover .card-details { display: flex; }
+        
+        .detail-header { padding: 10px 14px; background: var(--event-color); color: white; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0; }
+        .detail-body { padding: 12px; background: white; color: #334155; border-radius: 0 0 8px 8px; }
+        .dark .detail-body { background: #1e293b; color: #e2e8f0; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
+        .drag-active { border-color: #6366f1 !important; background-color: rgba(99, 102, 241, 0.1) !important; }
+
+        /* Flashcard Styles */
+        .perspective-1000 { perspective: 1000px; }
+        .flashcard-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+        .flashcard-inner.flipped { transform: rotateY(180deg); }
+        .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; -webkit-backface-visibility: hidden; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 1.5rem; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.2); }
+        .flashcard-back { transform: rotateY(180deg); }
+
+        :fullscreen #timeline-view { background: white; }
+        :fullscreen #timeline-view.dark { background: #0f172a; }
+        :fullscreen #timeline-view header { padding-top: 10px; padding-bottom: 10px; }
+
+        /* Login Screen */
+        #loginScreen {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(15, 23, 42, 0.95);
+            display: flex; flex-direction: column;
+            justify-content: center; items-center;
+            padding: 20px;
+        }
+        #loginScreen.hidden { display: none !important; }
+        
+        .status-toast { 
+            position: fixed; bottom: 20px; right: 20px; 
+            padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            opacity: 0; transform: translateY(20px); transition: all 0.3s; 
+            z-index: 100; display: flex; items-center; gap: 8px;
+        }
+        .status-toast.show { opacity: 1; transform: translateY(0); }
+        .status-loading { background: #3b82f6; color: white; }
+        .status-success { background: #10b981; color: white; }
+        .status-error { background: #ef4444; color: white; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-dark-bg dark:text-slate-100 h-screen flex flex-col overflow-hidden transition-colors duration-300">
+
+    <div id="loginScreen">
+        <div class="bg-white dark:bg-dark-surface p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-dark-border animate-fade-in">
+            <div class="text-center mb-6">
+                <div class="bg-indigo-600 text-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 mx-auto mb-4">
+                    <i class="fas fa-cubes text-2xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold dark:text-white">ChronosHub</h1>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">Tu gestor de ejes temporales en la nube.</p>
+            </div>
+
+            <div class="flex border-b border-slate-200 dark:border-slate-700 mb-6">
+                <button onclick="switchAuthMode('login')" id="tabLogin" class="flex-1 pb-2 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition-colors">Iniciar Sesión</button>
+                <button onclick="switchAuthMode('register')" id="tabRegister" class="flex-1 pb-2 font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">Registrarse</button>
+            </div>
+
+            <form onsubmit="handleEmailAuth(event)" class="space-y-4">
+                <div id="nameField" class="hidden">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label>
+                    <input type="text" id="authName" placeholder="Tu nombre" class="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Electrónico</label>
+                    <input type="email" id="authEmail" placeholder="usuario@email.com" required class="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contraseña</label>
+                    <input type="password" id="authPassword" placeholder="******" required class="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition dark:text-white">
+                </div>
+
+                <div id="authErrorMsg" class="text-red-500 text-xs text-center hidden font-medium"></div>
+
+                <button type="submit" id="submitAuthBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-indigo-600/20 transform transition active:scale-95">
+                    Entrar
+                </button>
+            </form>
+
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200 dark:border-slate-700"></div></div>
+                <div class="relative flex justify-center text-xs uppercase"><span class="px-2 bg-white dark:bg-dark-surface text-slate-400">O continúa con</span></div>
+            </div>
+
+            <button type="button" onclick="loginWithGoogle()" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-5 h-5">
+                Google
+            </button>
+        </div>
+    </div>
+
+    <div id="appInterface" class="h-full flex flex-col hidden relative">
+        
+        <div id="statusToast" class="status-toast status-loading">
+            <i class="fas fa-circle-notch fa-spin"></i> <span>Cargando...</span>
+        </div>
+
+        <div id="hub-view" class="h-full flex flex-col animate-fade-in">
+            <header class="bg-white dark:bg-dark-surface border-b border-slate-200 dark:border-dark-border px-8 py-4 flex justify-between items-center shadow-sm z-10">
+                <div class="flex items-center gap-3">
+                    <div class="bg-indigo-600 text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                        <i class="fas fa-cubes text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-2xl tracking-tight">ChronosHub</h1>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider">Cloud Edition</p>
+                    </div>
+                </div>
+                <div class="flex gap-3 items-center">
+                    <div class="hidden sm:flex flex-col items-end mr-2">
+                        <span id="userName" class="text-sm font-bold text-slate-700 dark:text-slate-200">Usuario</span>
+                        <span class="text-[10px] text-slate-400">Conectado</span>
+                    </div>
+                    
+                    <img id="userAvatar" src="" class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 hidden">
+                    <div id="defaultAvatar" class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold border border-indigo-400 hidden">U</div>
+                    
+                    <div class="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
+
+                    <button onclick="openLearnSelection()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium shadow-lg shadow-emerald-500/20 transition flex items-center gap-2">
+                        <i class="fas fa-graduation-cap"></i> <span class="hidden md:inline">Aprender</span>
+                    </button>
+                    <button onclick="toggleTheme()" class="w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-center" title="Cambiar Tema">
+                        <i class="fas fa-adjust text-slate-600 dark:text-yellow-400"></i>
+                    </button>
+                    <button onclick="logout()" class="w-10 h-10 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center justify-center text-red-500" title="Cerrar Sesión">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="flex-1 overflow-y-auto bg-slate-50 dark:bg-dark-bg relative">
+                <div class="px-8 py-4 text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2" id="breadcrumbs"></div>
+                <div class="hub-grid" id="hub-content"></div>
+
+                <button onclick="openCreateModal()" class="fixed bottom-8 right-8 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-full shadow-xl shadow-indigo-600/30 flex items-center gap-3 transition transform hover:scale-105 z-50">
+                    <i class="fas fa-plus text-lg"></i>
+                    <span class="font-bold">Nuevo Item</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="timeline-view" class="h-full flex flex-col hidden bg-slate-50 dark:bg-dark-bg">
+            <header class="bg-white dark:bg-dark-surface border-b border-slate-200 dark:border-dark-border px-4 py-2 flex items-center justify-between shadow-sm z-50 h-14 shrink-0 transition-all">
+                <div class="flex items-center gap-4">
+                    <button onclick="goToHub()" class="text-slate-500 hover:text-indigo-600 transition flex items-center gap-2 text-sm font-medium px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                        <i class="fas fa-arrow-left"></i> Volver
+                    </button>
+                    <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+                    <h2 id="timeline-title" class="font-bold text-lg tracking-tight text-slate-800 dark:text-white">Eje</h2>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-md border border-slate-200 dark:border-slate-700 mr-2">
+                        <button onclick="changeZoom(0.8)" class="w-7 h-7 flex items-center justify-center rounded hover:bg-white dark:hover:bg-slate-700 transition dark:text-slate-300"><i class="fas fa-minus text-xs"></i></button>
+                        <span class="text-xs font-mono w-10 text-center font-bold text-slate-600 dark:text-slate-300" id="zoom-level">100%</span>
+                        <button onclick="changeZoom(1.25)" class="w-7 h-7 flex items-center justify-center rounded hover:bg-white dark:hover:bg-slate-700 transition dark:text-slate-300"><i class="fas fa-plus text-xs"></i></button>
+                    </div>
+
+                    <button onclick="toggleFullScreen()" class="w-9 h-9 flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition mr-2" title="Pantalla Completa">
+                        <i class="fas fa-expand"></i>
+                    </button>
+
+                    <button onclick="openEventModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition shadow-sm">
+                        <i class="fas fa-plus"></i> <span class="hidden sm:inline">Añadir Evento</span>
+                    </button>
+                </div>
+            </header>
+
+            <main id="viewport" class="flex-1 relative cursor-grab active:cursor-grabbing overflow-hidden bg-slate-50 dark:bg-dark-bg">
+                <div id="ruler-layer" class="ruler-container"></div>
+                <div id="grid-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                <div id="events-layer" class="absolute top-0 left-0 w-full h-full z-10 pt-14">
+                    <div id="empty-state" class="absolute top-32 left-1/2 -translate-x-1/2 text-center pointer-events-none opacity-40 hidden">
+                        <i class="fas fa-stream text-3xl mb-2 text-slate-300"></i>
+                        <p class="text-slate-400">Eje vacío</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <div id="learn-view" class="h-full flex flex-col hidden bg-slate-100 dark:bg-dark-bg">
+            <header class="bg-white dark:bg-dark-surface border-b border-slate-200 dark:border-dark-border px-8 py-4 flex justify-between items-center shadow-sm z-10">
+                <div class="flex items-center gap-3">
+                    <button onclick="exitLearnMode()" class="text-slate-500 hover:text-slate-800 dark:hover:text-white transition">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                    <h2 class="font-bold text-lg text-slate-700 dark:text-slate-200">Modo Estudio</h2>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleLearnDirection()" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition" id="learn-mode-btn">
+                        <i class="fas fa-sync-alt mr-2"></i> <span id="learn-mode-text">Evento → Fecha</span>
+                    </button>
+                    <div class="text-sm font-mono text-slate-500 bg-slate-200 dark:bg-slate-800 px-3 py-1 rounded-full">
+                        <span id="learn-progress">0/0</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                <div class="w-full max-w-lg aspect-[4/3] perspective-1000 cursor-pointer group" onclick="flipCard()">
+                    <div class="flashcard-inner duration-500" id="flashcard">
+                        <div class="flashcard-front bg-white dark:bg-dark-surface border border-slate-200 dark:border-slate-700">
+                            <div class="p-8 flex flex-col items-center justify-center h-full w-full">
+                                <span class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">Pregunta</span>
+                                <div id="card-front-content" class="text-center w-full"></div>
+                                <div class="absolute bottom-6 text-slate-300 dark:text-slate-600 text-sm animate-pulse">Click para voltear</div>
+                            </div>
+                        </div>
+                        <div class="flashcard-back bg-indigo-600 text-white border border-indigo-500">
+                            <div class="p-8 flex flex-col items-center justify-center h-full w-full relative">
+                                <span class="text-xs font-bold text-indigo-200 uppercase mb-4 tracking-widest">Respuesta</span>
+                                <div id="card-back-content" class="text-center w-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex gap-6" id="learn-controls">
+                    <button onclick="handleAnswer(false)" class="w-32 py-3 rounded-xl bg-rose-100 text-rose-600 hover:bg-rose-200 font-bold transition shadow-sm border border-rose-200 flex flex-col items-center">
+                        <i class="fas fa-times mb-1"></i> <span>No lo sé</span>
+                    </button>
+                    <button onclick="handleAnswer(true)" class="w-32 py-3 rounded-xl bg-emerald-100 text-emerald-600 hover:bg-emerald-200 font-bold transition shadow-sm border border-emerald-200 flex flex-col items-center">
+                        <i class="fas fa-check mb-1"></i> <span>Me lo sé</span>
+                    </button>
+                </div>
+                
+                <div id="learn-finished" class="hidden text-center">
+                    <div class="text-6xl mb-4">🎉</div>
+                    <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">¡Sesión Completada!</h3>
+                    <p class="text-slate-500 mb-6">Has repasado todos los eventos.</p>
+                    <button onclick="exitLearnMode()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition">Volver al Hub</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="learn-select-modal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeLearnSelection()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-dark-surface rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+            <h3 class="text-xl font-bold mb-4 text-slate-800 dark:text-white">¿Qué quieres aprender?</h3>
+            <p class="text-sm text-slate-500 mb-4">Selecciona un eje o carpeta para empezar la sesión.</p>
+            <div class="max-h-60 overflow-y-auto space-y-2 pr-2" id="learn-list"></div>
+            <div class="flex justify-end mt-4"><button onclick="closeLearnSelection()" class="text-slate-500 hover:text-slate-700 px-4 py-2">Cancelar</button></div>
+        </div>
+    </div>
+
+    <div id="create-modal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeCreateModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-dark-surface rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+            <h3 class="text-xl font-bold mb-4 text-slate-800 dark:text-white">Crear Nuevo</h3>
+            <div class="flex border-b border-slate-200 dark:border-slate-700 mb-4">
+                <button onclick="setCreateTab('folder')" id="tab-create-folder" class="flex-1 pb-2 border-b-2 border-indigo-500 text-indigo-600 font-medium">Carpeta</button>
+                <button onclick="setCreateTab('timeline')" id="tab-create-timeline" class="flex-1 pb-2 border-b-2 border-transparent text-slate-500">Línea de Tiempo</button>
+            </div>
+            <form onsubmit="handleCreateSubmit(event)">
+                <input type="hidden" id="create-type" value="folder">
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label>
+                    <input type="text" id="create-name" required class="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Nombre...">
+                </div>
+                <div id="import-section" class="hidden mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Importar desde CSV</span>
+                        <span class="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1 rounded">Opcional</span>
+                    </div>
+                    <input type="file" id="import-file" accept=".csv,.txt" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    <div class="text-[10px] text-slate-400 mt-2 space-y-1">
+                        <p>Formatos aceptados (Nombre, Fecha):</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Evento, From 1990 Until 2000</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Evento, 01/01/2000</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2 text-slate-500 hover:text-slate-700">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium">Crear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="event-modal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeEventModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-dark-surface rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 transform transition-all p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-slate-800 dark:text-white" id="event-modal-title">Evento</h2>
+                <button onclick="closeEventModal()" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="event-form" onsubmit="handleEventSubmit(event)" class="space-y-3">
+                <input type="hidden" id="inp-id">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nombre</label>
+                    <input type="text" id="inp-name" required class="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-2 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                        <label class="block text-xs font-bold text-indigo-500 uppercase mb-1">Inicio</label>
+                        <div class="flex gap-1">
+                            <input type="number" id="inp-start-y" placeholder="Año" required class="w-full min-w-0 px-1 py-1 text-sm bg-white dark:bg-dark-surface border rounded text-center outline-none focus:border-indigo-500">
+                            <input type="number" id="inp-start-m" placeholder="Mes" min="1" max="12" class="w-12 px-1 py-1 text-sm bg-white dark:bg-dark-surface border rounded text-center outline-none focus:border-indigo-500">
+                            <input type="number" id="inp-start-d" placeholder="Día" min="1" max="31" class="w-12 px-1 py-1 text-sm bg-white dark:bg-dark-surface border rounded text-center outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+                    <div class="p-2 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Fin (Opcional)</label>
+                        <div class="flex gap-1">
+                            <input type="number" id="inp-end-y" placeholder="Año" class="w-full min-w-0 px-1 py-1 text-sm bg-white dark:bg-dark-surface border rounded text-center outline-none focus:border-indigo-500">
+                            <input type="number" id="inp-end-m" placeholder="Mes" min="1" max="12" class="w-12 px-1 py-1 text-sm bg-white dark:bg-dark-surface border rounded text-center outline-none focus:border-indigo-500">
+                            <input type="number" id="inp-end-d" placeholder="Día" min="1" max="31" class="w-12 px-1 py-1 text-sm bg-white dark:bg-dark-surface border rounded text-center outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Color</label>
+                    <div class="flex gap-2 items-center">
+                        <div id="color-palette" class="flex gap-1 flex-1 overflow-x-auto pb-1 no-scrollbar"></div>
+                        <input type="color" id="inp-color" class="w-6 h-6 rounded cursor-pointer border-0 p-0">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Imagen</label>
+                    <div class="flex text-xs mb-2 border-b border-slate-200 dark:border-slate-700">
+                        <button type="button" onclick="setImgMode('url')" id="tab-url" class="px-3 py-1 border-b-2 border-indigo-500 text-indigo-600 font-medium transition-colors">URL</button>
+                        <button type="button" onclick="setImgMode('file')" id="tab-file" class="px-3 py-1 border-b-2 border-transparent text-slate-500 hover:text-indigo-500 transition-colors">Subir / Arrastrar</button>
+                    </div>
+                    <input type="url" id="inp-img-url" class="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-xs dark:text-white" placeholder="https://...">
+                    <div id="img-input-file" class="hidden">
+                        <label id="drop-zone" for="inp-img-file" class="block w-full h-20 px-3 py-2 border-dashed border-2 border-slate-300 dark:border-slate-600 rounded text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 relative transition-all flex flex-col items-center justify-center" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                            <i class="fas fa-cloud-upload-alt text-2xl text-slate-400 mb-1"></i>
+                            <span class="text-xs text-slate-500 block pointer-events-none">Click o arrastra imagen aquí</span>
+                            <input id="inp-img-file" type="file" accept="image/*" onchange="previewFile()" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        </label>
+                        <input type="hidden" id="inp-img-base64">
+                        <div id="file-preview-name" class="text-xs text-green-600 mt-1 truncate h-4 font-medium px-1"></div>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-700 mt-2">
+                    <button type="button" id="btn-delete-event" onclick="deleteCurrentEvent()" class="text-red-500 hover:text-red-700 text-xs font-bold uppercase"><i class="fas fa-trash-alt"></i></button>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeEventModal()" class="px-3 py-1.5 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 rounded">Cancelar</button>
+                        <button type="submit" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded shadow">Guardar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN DE FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBpgow3Bg5kbp7EuVceig9s_t33q4_VcSY",
+            authDomain: "micatalogoapp-270f9.firebaseapp.com",
+            projectId: "micatalogoapp-270f9",
+            storageBucket: "micatalogoapp-270f9.firebasestorage.app",
+            messagingSenderId: "513722352831",
+            appId: "1:513722352831:web:2b2c04d99948d684cf720a"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // --- ESTADO ---
+        let currentUser = null;
+        let fileSystem = []; 
+        let currentPath = []; 
+        let currentTimeline = null; 
+        let currentFolderContent = []; 
+        let viewState = { pixelsPerYear: 50, offsetX: 0 };
+        const colors = ['#6366f1', '#ec4899', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#64748b'];
+        let saveTimeout;
+        let authMode = 'login'; // 'login' | 'register'
+
+        // --- AUTENTICACIÓN ACTUALIZADA ---
+        
+        function switchAuthMode(mode) {
+            authMode = mode;
+            const tabLogin = document.getElementById('tabLogin');
+            const tabRegister = document.getElementById('tabRegister');
+            const btn = document.getElementById('submitAuthBtn');
+            const nameField = document.getElementById('nameField');
+            const errorMsg = document.getElementById('authErrorMsg');
+
+            errorMsg.classList.add('hidden');
+
+            if (mode === 'login') {
+                tabLogin.className = "flex-1 pb-2 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition-colors";
+                tabRegister.className = "flex-1 pb-2 font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors";
+                btn.textContent = "Entrar";
+                nameField.classList.add('hidden');
+            } else {
+                tabRegister.className = "flex-1 pb-2 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition-colors";
+                tabLogin.className = "flex-1 pb-2 font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors";
+                btn.textContent = "Crear Cuenta";
+                nameField.classList.remove('hidden');
+            }
+        }
+
+        async function handleEmailAuth(e) {
+            e.preventDefault();
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const name = document.getElementById('authName').value;
+            const errorMsg = document.getElementById('authErrorMsg');
+            const btn = document.getElementById('submitAuthBtn');
+
+            errorMsg.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Procesando...';
+
+            try {
+                if (authMode === 'register') {
+                    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    if (name) {
+                        await userCredential.user.updateProfile({ displayName: name });
+                        // Refresco manual de la UI
+                        document.getElementById('userName').textContent = name;
+                        const avatar = document.getElementById('defaultAvatar');
+                        avatar.textContent = name.charAt(0).toUpperCase();
+                        avatar.classList.remove('hidden');
+                        document.getElementById('userAvatar').classList.add('hidden');
+                    }
+                } else {
+                    await auth.signInWithEmailAndPassword(email, password);
+                }
+            } catch (error) {
+                console.error(error);
+                let msg = "Error desconocido.";
+                if (error.code === 'auth/wrong-password') msg = "Contraseña incorrecta.";
+                else if (error.code === 'auth/user-not-found') msg = "No existe cuenta con este correo.";
+                else if (error.code === 'auth/email-already-in-use') msg = "Este correo ya está registrado.";
+                else if (error.code === 'auth/weak-password') msg = "La contraseña es muy débil (min 6 caracteres).";
+                else if (error.code === 'auth/invalid-email') msg = "El formato del correo no es válido.";
+                
+                errorMsg.textContent = msg;
+                errorMsg.classList.remove('hidden');
+                btn.disabled = false;
+                btn.textContent = authMode === 'login' ? "Entrar" : "Crear Cuenta";
+            }
+        }
+
+        async function loginWithGoogle() {
+            try {
+                await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+            } catch (error) {
+                console.error("Error Google:", error);
+                alert("Error al iniciar con Google: " + error.message);
+            }
+        }
+
+        function logout() {
+            auth.signOut();
+            window.location.reload();
+        }
+
+        auth.onAuthStateChanged(user => {
+            const loginScreen = document.getElementById('loginScreen');
+            const appInterface = document.getElementById('appInterface');
+            
+            if (user) {
+                currentUser = user;
+                loginScreen.classList.add('hidden');
+                appInterface.classList.remove('hidden');
+                
+                const displayName = user.displayName || user.email.split('@')[0];
+                document.getElementById('userName').textContent = displayName;
+                
+                // Lógica de Avatar
+                if(user.photoURL) {
+                    document.getElementById('userAvatar').src = user.photoURL;
+                    document.getElementById('userAvatar').classList.remove('hidden');
+                    document.getElementById('defaultAvatar').classList.add('hidden');
+                } else {
+                    document.getElementById('userAvatar').classList.add('hidden');
+                    const defAvatar = document.getElementById('defaultAvatar');
+                    defAvatar.classList.remove('hidden');
+                    defAvatar.textContent = displayName.charAt(0).toUpperCase();
+                }
+                
+                if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                }
+                
+                loadCloudData();
+            } else {
+                loginScreen.classList.remove('hidden');
+                appInterface.classList.add('hidden');
+            }
+        });
+
+        // --- BASE DE DATOS (CLOUD FIRESTORE) ---
+        async function loadCloudData() {
+            showToast('loading', 'Sincronizando...');
+            try {
+                const docRef = db.collection('usuarios').doc(currentUser.uid);
+                const docSnap = await docRef.get();
+
+                if (docSnap.exists) {
+                    const data = docSnap.data();
+                    if (data.timelineData) {
+                        fileSystem = data.timelineData;
+                    } else {
+                        fileSystem = [
+                            { id: 'f1', type: 'folder', name: 'Ejemplos', items: [] },
+                            { id: 't1', type: 'timeline', name: 'Mi primer Eje', events: [] }
+                        ];
+                        await docRef.set({ timelineData: fileSystem }, { merge: true });
+                    }
+                    showToast('success', 'Datos cargados');
+                } else {
+                    fileSystem = [];
+                    await docRef.set({ timelineData: fileSystem }); 
+                    showToast('success', 'Bienvenido');
+                }
+                currentFolderContent = fileSystem;
+                renderHub();
+            } catch (error) {
+                console.error("Error cargando:", error);
+                showToast('error', 'Error de conexión');
+            }
+        }
+
+        async function saveToDisk() {
+            if (!currentUser) return;
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {
+                showToast('loading', 'Guardando...');
+                try {
+                    await db.collection('usuarios').doc(currentUser.uid).set({
+                        timelineData: fileSystem
+                    }, { merge: true });
+                    showToast('success', 'Guardado');
+                } catch (error) {
+                    console.error("Error guardando:", error);
+                    showToast('error', 'No se pudo guardar');
+                }
+            }, 1000); 
+        }
+
+        function showToast(type, msg) {
+            const toast = document.getElementById('statusToast');
+            toast.className = `status-toast show status-${type}`;
+            toast.innerHTML = type === 'loading' 
+                ? `<i class="fas fa-circle-notch fa-spin"></i> ${msg}` 
+                : `<i class="fas fa-${type === 'success' ? 'check' : 'times'}"></i> ${msg}`;
+            if(type !== 'loading') {
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            }
+        }
+
+        // --- FUNCIONALIDAD ORIGINAL DE CHRONOSHUB (Sin cambios lógicos) ---
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.getElementById('timeline-view').requestFullscreen().catch(err => alert(`Error: ${err.message}`));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function calculateLayout(events, scale) {
+            const sorted = events.slice().sort((a,b) => a.start - b.start);
+            const lanes = []; 
+            const LANE_HEIGHT = 50; 
+            const BASE_TOP = 70; 
+            const positions = new Map();
+
+            sorted.forEach(ev => {
+                const startPx = ev.start * scale;
+                let endPx = startPx;
+                if (ev.end) {
+                    let w = (ev.end - ev.start) * scale;
+                    if (w < 20) w = 20; 
+                    endPx = startPx + w;
+                } else {
+                    endPx = startPx + 180; 
+                }
+                endPx += 10; 
+
+                let laneIndex = -1;
+                for(let i=0; i<lanes.length; i++) {
+                    if (lanes[i] < startPx) { laneIndex = i; break; }
+                }
+                if (laneIndex === -1) { laneIndex = lanes.length; lanes.push(endPx); } 
+                else { lanes[laneIndex] = endPx; }
+
+                positions.set(ev.id, BASE_TOP + (laneIndex * LANE_HEIGHT));
+            });
+            return positions;
+        }
+
+        function dateToDecimal(y, m, d) {
+            y = parseFloat(y); if (isNaN(y)) return null;
+            m = m ? parseFloat(m) - 1 : 0; d = d ? parseFloat(d) : 1;
+            return y + (((m * 30.4) + d) / 365.25);
+        }
+
+        function renderHub() {
+            const grid = document.getElementById('hub-content');
+            grid.innerHTML = '';
+            if (currentFolderContent.length === 0) grid.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10">Carpeta vacía</div>`;
+            currentFolderContent.forEach((item, index) => {
+                const el = document.createElement('div');
+                el.className = 'hub-item bg-slate-50 dark:bg-slate-800';
+                let icon = item.type === 'folder' ? 'fa-folder text-yellow-500' : 'fa-stream text-indigo-500';
+                const count = item.type === 'folder' ? (item.items ? item.items.length : 0) : (item.events ? item.events.length : 0);
+                el.innerHTML = `
+                    <button class="hub-delete-btn" onclick="deleteItem(event, ${index})"><i class="fas fa-trash-alt text-xs"></i></button>
+                    <i class="fas ${icon} text-4xl mb-3"></i>
+                    <span class="font-medium text-center text-sm px-2 truncate w-full text-slate-700 dark:text-slate-200">${item.name}</span>
+                    <span class="text-[10px] text-slate-400 mt-1">${count} items</span>
+                `;
+                el.onclick = (e) => { if (!e.target.closest('.hub-delete-btn')) openItem(item); };
+                grid.appendChild(el);
+            });
+            updateBreadcrumbs();
+        }
+
+        function deleteItem(e, index) {
+            e.stopPropagation();
+            if(confirm("¿Seguro que quieres borrar esto?")) {
+                currentFolderContent.splice(index, 1);
+                renderHub();
+                saveToDisk();
+            }
+        }
+
+        function openItem(item) {
+            if (item.type === 'folder') {
+                currentPath.push(item);
+                currentFolderContent = item.items;
+                renderHub();
+            } else {
+                openTimeline(item);
+            }
+        }
+
+        function navigateHome() {
+            currentPath = [];
+            currentFolderContent = fileSystem;
+            renderHub();
+        }
+
+        function updateBreadcrumbs() {
+            const bc = document.getElementById('breadcrumbs');
+            bc.innerHTML = `<span class="cursor-pointer hover:text-indigo-500 font-medium" onclick="navigateHome()"><i class="fas fa-home"></i> Inicio</span>`;
+            currentPath.forEach(folder => {
+                bc.innerHTML += ` <span class="text-slate-300">/</span> <span class="font-medium text-slate-700 dark:text-slate-300">${folder.name}</span>`;
+            });
+        }
+
+        function openCreateModal() {
+            document.getElementById('create-modal').classList.remove('hidden');
+            document.getElementById('create-name').value = '';
+            document.getElementById('import-file').value = '';
+            setCreateTab('folder');
+        }
+        function closeCreateModal() { document.getElementById('create-modal').classList.add('hidden'); }
+        function setCreateTab(type) {
+            document.getElementById('create-type').value = type;
+            const tabFolder = document.getElementById('tab-create-folder');
+            const tabTimeline = document.getElementById('tab-create-timeline');
+            const importSec = document.getElementById('import-section');
+            if (type === 'folder') {
+                tabFolder.className = "flex-1 pb-2 border-b-2 border-indigo-500 text-indigo-600 font-medium";
+                tabTimeline.className = "flex-1 pb-2 border-b-2 border-transparent text-slate-500";
+                importSec.classList.add('hidden');
+            } else {
+                tabTimeline.className = "flex-1 pb-2 border-b-2 border-indigo-500 text-indigo-600 font-medium";
+                tabFolder.className = "flex-1 pb-2 border-b-2 border-transparent text-slate-500";
+                importSec.classList.remove('hidden');
+            }
+        }
+        function handleCreateSubmit(e) {
+            e.preventDefault();
+            const type = document.getElementById('create-type').value;
+            const name = document.getElementById('create-name').value;
+            const newItem = { id: Date.now().toString(), type: type, name: name, items: type === 'folder' ? [] : undefined, events: type === 'timeline' ? [] : undefined };
+            
+            if (type === 'timeline') {
+                const fileInput = document.getElementById('import-file');
+                if (fileInput.files.length > 0) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) { 
+                        newItem.events = parseCSV(e.target.result); 
+                        currentFolderContent.push(newItem); 
+                        renderHub(); 
+                        closeCreateModal(); 
+                        saveToDisk(); 
+                    };
+                    reader.readAsText(fileInput.files[0]);
+                    return;
+                }
+            }
+            currentFolderContent.push(newItem);
+            renderHub();
+            closeCreateModal();
+            saveToDisk();
+        }
+
+        function openTimeline(timeline) {
+            currentTimeline = timeline;
+            document.getElementById('hub-view').classList.add('hidden');
+            document.getElementById('timeline-view').classList.remove('hidden');
+            document.getElementById('timeline-title').innerText = timeline.name;
+            const w = document.getElementById('viewport').clientWidth;
+            const startYear = timeline.events.length > 0 ? timeline.events[0].start : new Date().getFullYear();
+            viewState.offsetX = (w / 2) - (startYear * viewState.pixelsPerYear);
+            renderTimeline();
+        }
+        function goToHub() {
+            currentTimeline = null;
+            if (document.fullscreenElement) document.exitFullscreen();
+            document.getElementById('timeline-view').classList.add('hidden');
+            document.getElementById('hub-view').classList.remove('hidden');
+            renderHub();
+        }
+
+        const viewport = document.getElementById('viewport');
+        const rulerLayer = document.getElementById('ruler-layer');
+        const gridLayer = document.getElementById('grid-layer');
+        const eventsLayer = document.getElementById('events-layer');
+        const emptyState = document.getElementById('empty-state');
+        let isDragging = false, lastX = 0;
+        let draggingCard = null, dragStartY = 0, dragOffsetY = 0;
+
+        viewport.addEventListener('mousedown', (e) => { 
+            if (e.target.closest('.event-card')) return; 
+            isDragging = true; lastX = e.clientX; viewport.style.cursor = 'grabbing'; 
+        });
+        window.addEventListener('mouseup', () => { 
+            if(draggingCard) saveToDisk(); 
+            isDragging = false; draggingCard = null; viewport.style.cursor = 'grab'; 
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) { viewState.offsetX += (e.clientX - lastX); lastX = e.clientX; requestAnimationFrame(renderTimeline); }
+            if (draggingCard) {
+                const layerRect = eventsLayer.getBoundingClientRect();
+                const newTop = Math.max(0, e.clientY - layerRect.top - dragOffsetY);
+                draggingCard.element.style.top = `${newTop}px`;
+                draggingCard.event._top = newTop;
+            }
+        });
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = viewport.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const delta = -e.deltaY;
+            let newZoom = viewState.pixelsPerYear * (1 + delta * 0.001);
+            if (newZoom < 5) newZoom = 5; if (newZoom > 300) newZoom = 300;
+            const yearUnderMouse = (mouseX - viewState.offsetX) / viewState.pixelsPerYear;
+            viewState.pixelsPerYear = newZoom;
+            viewState.offsetX = mouseX - (yearUnderMouse * viewState.pixelsPerYear);
+            renderTimeline();
+            document.getElementById('zoom-level').innerText = Math.round(viewState.pixelsPerYear) + '%';
+        }, { passive: false });
+
+        function getX(year) { return (year * viewState.pixelsPerYear) + viewState.offsetX; }
+        
+        function renderTimeline() {
+            if (!currentTimeline) return;
+            rulerLayer.innerHTML = ''; gridLayer.innerHTML = ''; eventsLayer.innerHTML = '';
+            const events = currentTimeline.events;
+            if (events.length === 0) eventsLayer.appendChild(emptyState);
+            emptyState.classList.toggle('hidden', events.length > 0);
+            const w = viewport.clientWidth;
+            
+            const layoutPositions = calculateLayout(events, viewState.pixelsPerYear);
+
+            const startYear = Math.floor((0 - viewState.offsetX) / viewState.pixelsPerYear);
+            const endYear = Math.ceil((w - viewState.offsetX) / viewState.pixelsPerYear);
+            let step = 1;
+            if (viewState.pixelsPerYear < 10) step = 50; else if (viewState.pixelsPerYear < 20) step = 10; else if (viewState.pixelsPerYear < 50) step = 5;
+            for (let y = startYear - step; y <= endYear + step; y += step) {
+                const year = Math.round(y / step) * step; const x = getX(year);
+                const tick = document.createElement('div'); tick.className = 'ruler-tick'; tick.style.left = `${x}px`; tick.innerText = year; rulerLayer.appendChild(tick);
+                if (year % (step * 2) === 0 || step === 1) { const grid = document.createElement('div'); grid.className = 'grid-line'; grid.style.left = `${x}px`; gridLayer.appendChild(grid); }
+            }
+
+            const visibleEvents = events.filter(e => { const x1 = getX(e.start); const x2 = e.end ? getX(e.end) : x1 + 100; return x2 > -200 && x1 < w + 200; });
+            
+            visibleEvents.forEach(ev => {
+                const x = getX(ev.start); 
+                let widthStyle = '';
+                if (ev.end) { 
+                    const calculatedWidth = (ev.end - ev.start) * viewState.pixelsPerYear; 
+                    const finalWidth = Math.max(calculatedWidth, 20); 
+                    widthStyle = `width: ${finalWidth}px;`;
+                } else { widthStyle = `width: auto; min-width: 100px; max-width: 300px;`; }
+                
+                const topPos = (ev._top !== undefined) ? ev._top : (layoutPositions.get(ev.id) || 70);
+                
+                const el = document.createElement('div'); 
+                el.className = 'event-card'; 
+                el.style = `${widthStyle} left: ${x}px; top: ${topPos}px; border-left-color: ${ev.color}; --event-color: ${ev.color};`;
+                
+                const dateLabel = ev.displayDate || ev.start.toFixed(0);
+                
+                el.innerHTML = `
+                    <div class="card-preview">
+                        <div class="card-preview-row">
+                            ${ev.img ? `<img src="${ev.img}" class="card-img-thumb">` : ''}
+                            <span class="card-title-preview">${ev.name}</span>
+                        </div>
+                        <span class="card-date-preview">${dateLabel}</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-header">
+                            <span class="font-bold truncate text-sm flex-1 mr-2">${ev.name}</span>
+                            <span class="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white/90 whitespace-nowrap">${dateLabel}</span>
+                        </div>
+                        <div class="detail-body">
+                            ${ev.img ? `<img src="${ev.img}" class="w-full h-32 object-cover rounded mb-2 block">` : ''}
+                            <p class="text-xs opacity-75">Click para editar.</p>
+                        </div>
+                    </div>
+                `;
+                el.onmousedown = (e) => { e.stopPropagation(); dragStartY = e.clientY; draggingCard = {event: ev, element: el}; dragOffsetY = e.clientY - el.getBoundingClientRect().top; el.style.transition = 'none'; };
+                el.onclick = (e) => { if(Math.abs(e.clientY - dragStartY) < 5) openEventModal(ev); };
+                eventsLayer.appendChild(el);
+            });
+        }
+
+        function setImgMode(mode) {
+            const urlInput = document.getElementById('inp-img-url'); const fileInputDiv = document.getElementById('img-input-file'); const btnUrl = document.getElementById('tab-url'); const btnFile = document.getElementById('tab-file');
+            if (mode === 'url') { urlInput.classList.remove('hidden'); fileInputDiv.classList.add('hidden'); btnUrl.className = "px-3 py-1 border-b-2 border-indigo-500 text-indigo-600 font-medium transition-colors"; btnFile.className = "px-3 py-1 border-b-2 border-transparent text-slate-500 hover:text-indigo-500 transition-colors"; } 
+            else { urlInput.classList.add('hidden'); fileInputDiv.classList.remove('hidden'); btnFile.className = "px-3 py-1 border-b-2 border-indigo-500 text-indigo-600 font-medium transition-colors"; btnUrl.className = "px-3 py-1 border-b-2 border-transparent text-slate-500 hover:text-indigo-500 transition-colors"; }
+        }
+        function previewFile() { const input = document.getElementById('inp-img-file'); if (input.files && input.files[0]) processFile(input.files[0]); }
+        function processFile(file) { 
+            if (!file.type.startsWith('image/')) return; 
+            const reader = new FileReader(); 
+            reader.onload = function(e) { 
+                document.getElementById('inp-img-base64').value = e.target.result; 
+                document.getElementById('file-preview-name').innerText = file.name; 
+            }; 
+            reader.readAsDataURL(file); 
+        }
+        function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('drop-zone').classList.add('drag-active'); }
+        function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('drop-zone').classList.remove('drag-active'); }
+        function handleDrop(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('drop-zone').classList.remove('drag-active'); const files = e.dataTransfer.files; if (files.length > 0) processFile(files[0]); }
+        
+        function openEventModal(ev = null) {
+            document.getElementById('event-modal').classList.remove('hidden'); document.getElementById('event-form').reset(); document.getElementById('inp-img-base64').value = ''; document.getElementById('file-preview-name').innerText = ''; setImgMode('url');
+            const palette = document.getElementById('color-palette'); palette.innerHTML = ''; colors.forEach(c => { const d = document.createElement('div'); d.className = 'w-6 h-6 rounded-full cursor-pointer hover:scale-110 transition shrink-0'; d.style.backgroundColor = c; d.onclick = () => document.getElementById('inp-color').value = c; palette.appendChild(d); });
+            if (ev) {
+                document.getElementById('event-modal-title').innerText = 'Editar Evento'; document.getElementById('inp-id').value = ev.id; document.getElementById('inp-name').value = ev.name; document.getElementById('inp-color').value = ev.color;
+                if (ev.img && ev.img.startsWith('data:')) { setImgMode('file'); document.getElementById('inp-img-base64').value = ev.img; document.getElementById('file-preview-name').innerText = 'Imagen cargada'; } else { document.getElementById('inp-img-url').value = ev.img || ''; }
+                const sY = Math.floor(ev.start); document.getElementById('inp-start-y').value = sY; if(ev.realDateStart) { document.getElementById('inp-start-m').value = ev.realDateStart.m; document.getElementById('inp-start-d').value = ev.realDateStart.d; }
+                if (ev.end) { const eY = Math.floor(ev.end); document.getElementById('inp-end-y').value = eY; if(ev.realDateEnd) { document.getElementById('inp-end-m').value = ev.realDateEnd.m; document.getElementById('inp-end-d').value = ev.realDateEnd.d; } }
+                document.getElementById('btn-delete-event').classList.remove('hidden');
+            } else {
+                document.getElementById('event-modal-title').innerText = 'Nuevo Evento'; document.getElementById('inp-id').value = ''; document.getElementById('btn-delete-event').classList.add('hidden'); document.getElementById('inp-color').value = colors[Math.floor(Math.random()*colors.length)];
+                const w = viewport.clientWidth; const centerYear = Math.floor((w/2 - viewState.offsetX) / viewState.pixelsPerYear); document.getElementById('inp-start-y').value = centerYear;
+            }
+        }
+        function closeEventModal() { document.getElementById('event-modal').classList.add('hidden'); }
+        
+        function handleEventSubmit(e) {
+            e.preventDefault(); const id = document.getElementById('inp-id').value; const name = document.getElementById('inp-name').value;
+            const sY = document.getElementById('inp-start-y').value; const sM = document.getElementById('inp-start-m').value; const sD = document.getElementById('inp-start-d').value; const startDec = dateToDecimal(sY, sM, sD);
+            const eY = document.getElementById('inp-end-y').value; const eM = document.getElementById('inp-end-m').value; const eD = document.getElementById('inp-end-d').value; let endDec = null; if (eY) endDec = dateToDecimal(eY, eM, eD);
+            let label = sY; if (sM) label += `/${sM}`; if (sD) label += `/${sD}`; if (eY) { label += ` - ${eY}`; if(eM) label += `/${eM}`; }
+            const color = document.getElementById('inp-color').value;
+            const isFileMode = document.getElementById('inp-img-url').classList.contains('hidden'); let img = ''; if (isFileMode) { img = document.getElementById('inp-img-base64').value; } else { img = document.getElementById('inp-img-url').value; }
+            const evData = { id: id ? parseFloat(id) : Date.now(), name, start: startDec, end: endDec, color, img, displayDate: label, realDateStart: { y: sY, m: sM, d: sD }, realDateEnd: eY ? { y: eY, m: eM, d: eD } : null };
+            if (id) { const idx = currentTimeline.events.findIndex(x => x.id == id); if (idx !== -1) { evData._top = currentTimeline.events[idx]._top; currentTimeline.events[idx] = evData; } } else { currentTimeline.events.push(evData); setTimeout(() => { const w = viewport.clientWidth; viewState.offsetX = (w/2) - (startDec * viewState.pixelsPerYear); renderTimeline(); }, 50); }
+            closeEventModal(); renderTimeline();
+            saveToDisk();
+        }
+        
+        function deleteCurrentEvent() { const id = document.getElementById('inp-id').value; if(id && confirm("¿Borrar evento?")) { currentTimeline.events = currentTimeline.events.filter(e => e.id != id); closeEventModal(); renderTimeline(); saveToDisk(); } }
+        function changeZoom(factor) { const w = viewport.clientWidth; const centerYear = (w/2 - viewState.offsetX) / viewState.pixelsPerYear; viewState.pixelsPerYear *= factor; if(viewState.pixelsPerYear < 5) viewState.pixelsPerYear = 5; if(viewState.pixelsPerYear > 300) viewState.pixelsPerYear = 300; viewState.offsetX = (w/2) - (centerYear * viewState.pixelsPerYear); renderTimeline(); document.getElementById('zoom-level').innerText = Math.round(viewState.pixelsPerYear) + '%'; }
+        function toggleTheme() { document.documentElement.classList.toggle('dark'); }
+
+        function parseCSV(text) {
+            const lines = text.split(/\r\n|\n/); const events = []; const regexFromUntil = /From\s+(\d+)\s+Until\s+(\d+)/i; const regexDateSlash = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+            lines.forEach(line => { if (!line.trim()) return; let parts; if (line.includes(';')) parts = line.split(';'); else parts = line.split(','); if (parts.length >= 2) { const name = parts[0].trim(); let dateStr = parts.slice(1).join(',').trim(); let startVal = null, endVal = null, display = dateStr; let realStart = null; const matchFrom = dateStr.match(regexFromUntil); if (matchFrom) { startVal = parseFloat(matchFrom[1]); endVal = parseFloat(matchFrom[2]); display = `${startVal} - ${endVal}`; } else { const matchSlash = dateStr.match(regexDateSlash); if (matchSlash) { const d = parseInt(matchSlash[1]); const m = parseInt(matchSlash[2]); const y = parseInt(matchSlash[3]); startVal = dateToDecimal(y, m, d); realStart = { d, m, y }; display = `${d}/${m}/${y}`; } else { const y = parseFloat(dateStr); if (!isNaN(y)) { startVal = y; display = y.toString(); } } } if (startVal !== null) { events.push({ id: Date.now() + Math.random(), name: name, start: startVal, end: endVal, displayDate: display, realDateStart: realStart, color: colors[Math.floor(Math.random()*colors.length)] }); } } });
+            return events;
+        }
+
+        let learnSession = { queue: [], currentCard: null, mode: 'name-to-date', total: 0, completed: 0 };
+
+        function openLearnSelection() {
+            const modal = document.getElementById('learn-select-modal');
+            const list = document.getElementById('learn-list');
+            list.innerHTML = '';
+            function renderItemsRecursively(items, level = 0) {
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = `p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 hover:border-indigo-500 cursor-pointer transition flex items-center gap-3 mb-2`;
+                    div.style.marginLeft = `${level * 16}px`;
+                    const icon = item.type === 'folder' ? 'fa-folder text-yellow-500' : 'fa-stream text-indigo-500';
+                    const countText = item.type === 'folder' ? 'Carpeta' : `${item.events.length} eventos`;
+                    div.innerHTML = `<i class="fas ${icon}"></i><div class="flex-1"><div class="font-medium text-slate-700 dark:text-slate-200 text-sm">${item.name}</div><div class="text-[10px] text-slate-400">${countText}</div></div><i class="fas fa-chevron-right text-slate-300"></i>`;
+                    div.onclick = () => initLearnSession(item);
+                    list.appendChild(div);
+                    if (item.type === 'folder') renderItemsRecursively(item.items, level + 1);
+                });
+            }
+            renderItemsRecursively(fileSystem);
+            modal.classList.remove('hidden');
+        }
+
+        function closeLearnSelection() { document.getElementById('learn-select-modal').classList.add('hidden'); }
+
+        function getAllEvents(item) {
+            let events = [];
+            if (item.type === 'timeline') { events = [...item.events]; } 
+            else if (item.type === 'folder') { item.items.forEach(sub => { events = events.concat(getAllEvents(sub)); }); }
+            return events;
+        }
+
+        function initLearnSession(item) {
+            const events = getAllEvents(item);
+            if (events.length === 0) { alert("Este elemento no contiene eventos."); return; }
+            learnSession.queue = events.sort(() => Math.random() - 0.5);
+            learnSession.total = learnSession.queue.length;
+            learnSession.completed = 0;
+            closeLearnSelection();
+            document.getElementById('hub-view').classList.add('hidden');
+            document.getElementById('learn-view').classList.remove('hidden');
+            document.getElementById('learn-finished').classList.add('hidden');
+            document.querySelector('.perspective-1000').classList.remove('hidden');
+            document.getElementById('learn-controls').classList.remove('hidden');
+            showNextCard();
+        }
+
+        function exitLearnMode() { document.getElementById('learn-view').classList.add('hidden'); document.getElementById('hub-view').classList.remove('hidden'); }
+
+        function toggleLearnDirection() {
+            learnSession.mode = learnSession.mode === 'name-to-date' ? 'date-to-name' : 'name-to-date';
+            document.getElementById('learn-mode-text').innerText = learnSession.mode === 'name-to-date' ? 'Evento → Fecha' : 'Fecha → Evento';
+            if (learnSession.currentCard) {
+                const card = document.getElementById('flashcard');
+                card.classList.remove('flipped');
+                setTimeout(() => renderCardContent(), 300);
+            }
+        }
+
+        function showNextCard() {
+            if (learnSession.queue.length === 0) { finishSession(); return; }
+            learnSession.currentCard = learnSession.queue.shift();
+            document.getElementById('learn-progress').innerText = `${learnSession.completed}/${learnSession.total}`;
+            const card = document.getElementById('flashcard');
+            card.classList.remove('flipped');
+            renderCardContent();
+        }
+
+        function renderCardContent() {
+            const ev = learnSession.currentCard;
+            const front = document.getElementById('card-front-content');
+            const back = document.getElementById('card-back-content');
+            const dateText = ev.displayDate || ev.start.toFixed(0);
+            const imgHTML = ev.img ? `<img src="${ev.img}" class="h-24 w-24 object-cover rounded-full mx-auto mb-4 border-2 border-slate-200 dark:border-slate-600">` : '';
+            front.innerHTML = ''; back.innerHTML = '';
+            if (learnSession.mode === 'name-to-date') {
+                front.innerHTML = `${imgHTML}<h3 class="text-xl font-bold text-slate-800 dark:text-white">${ev.name}</h3>`;
+                back.innerHTML = `<div class="text-4xl font-mono font-bold mb-2">${dateText}</div><p class="text-indigo-200 text-sm">Fecha del evento</p>`;
+            } else {
+                front.innerHTML = `<div class="text-4xl font-mono font-bold text-slate-800 dark:text-white mb-2">${dateText}</div><p class="text-slate-400 text-sm">¿Qué ocurrió?</p>`;
+                back.innerHTML = `${imgHTML}<h3 class="text-xl font-bold text-white">${ev.name}</h3>`;
+            }
+        }
+
+        function flipCard() { document.getElementById('flashcard').classList.toggle('flipped'); }
+
+        function handleAnswer(known) {
+            const card = document.getElementById('flashcard');
+            if (!card.classList.contains('flipped')) { card.classList.add('flipped'); setTimeout(() => processAnswer(known), 800); } 
+            else { processAnswer(known); }
+        }
+
+        function processAnswer(known) {
+            if (known) { learnSession.completed++; } 
+            else { const insertAt = Math.floor(Math.random() * (learnSession.queue.length)) + 1; learnSession.queue.splice(insertAt, 0, learnSession.currentCard); }
+            showNextCard();
+        }
+
+        function finishSession() {
+            document.querySelector('.perspective-1000').classList.add('hidden');
+            document.getElementById('learn-controls').classList.add('hidden');
+            document.getElementById('learn-finished').classList.remove('hidden');
+            document.getElementById('learn-progress').innerText = `${learnSession.total}/${learnSession.total}`;
+        }
+
+        window.onresize = renderTimeline;
+    </script>
+</body>
+</html>
