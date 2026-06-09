@@ -119,7 +119,7 @@
             display: flex; align-items: center; padding: 0 8px 0 4px;
             cursor: grab; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             z-index: 10; border-left: 4px solid transparent; 
-            transition: box-shadow 0.2s;
+            transition: width 0.18s ease, box-shadow 0.2s, transform 0.2s;
             white-space: nowrap; 
             overflow: hidden;
         }
@@ -127,9 +127,14 @@
         .dark .event-card { background: #1e293b; color: white; border: 1px solid #334155; border-left-width: 4px; }
 
         .event-card:hover {
-            z-index: 100 !important; height: auto; width: auto !important;
+            z-index: 100 !important;
+            height: auto;
+            width: var(--hover-width, var(--card-width)) !important;
             overflow: visible;
-            min-width: 250px; max-width: 320px; padding: 0; border-radius: 8px;
+            min-width: 0;
+            max-width: none;
+            padding: 0;
+            border-radius: 8px;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); transform: translateY(-2px);
             border-left: none;
         }
@@ -137,19 +142,19 @@
         
         .card-preview { 
             display: flex; flex-direction: column; justify-content: center; 
-            width: 100%; height: 100%; padding-left: 2px; line-height: 1.1; 
+            width: 100%; min-width: 0; height: 100%; padding-left: 2px; line-height: 1.1; 
         }
-        .card-preview-row { display: flex; align-items: center; width: 100%; }
-        .card-title-preview { font-size: 11px; font-weight: 600; margin-right: 4px; }
-        .card-date-preview { font-size: 9px; opacity: 0.7; }
+        .card-preview-row { display: flex; align-items: center; width: 100%; min-width: 0; }
+        .card-title-preview { font-size: 11px; font-weight: 600; margin-right: 4px; overflow: hidden; text-overflow: ellipsis; }
+        .card-date-preview { font-size: 9px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; }
         .card-img-thumb { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; margin-right: 4px; flex-shrink: 0; }
 
-        .card-details { display: none; flex-direction: column; width: 100%; animation: pop-in 0.2s; }
+        .card-details { display: none; flex-direction: column; width: 100%; min-width: 0; animation: pop-in 0.2s; }
         .event-card:hover .card-preview { display: none; }
         .event-card:hover .card-details { display: flex; }
         
-        .detail-header { padding: 10px 14px; background: var(--event-color); color: white; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0; }
-        .detail-body { padding: 12px; background: white; color: #334155; border-radius: 0 0 8px 8px; }
+        .detail-header { padding: 10px 14px; background: var(--event-color); color: white; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0; min-width: 0; }
+        .detail-body { padding: 12px; background: white; color: #334155; border-radius: 0 0 8px 8px; white-space: normal; }
         .dark .detail-body { background: #1e293b; color: #e2e8f0; }
 
         /* Custom Scrollbar */
@@ -916,6 +921,33 @@
 
         function getX(year) { return (year * viewState.pixelsPerYear) + viewState.offsetX; }
         
+        function getEventDurationWidth(ev, scale) {
+            if (!ev.end) return 100;
+            return Math.max((ev.end - ev.start) * scale, 20);
+        }
+
+        function estimateEventCardWidth(ev, dateLabel) {
+            const title = ev.name || '';
+            const date = dateLabel || '';
+            const imageExtra = ev.img ? 26 : 0;
+            const titleWidth = imageExtra + (title.length * 7.2) + 34;
+            const dateWidth = (date.length * 5.5) + 24;
+            return Math.min(Math.max(Math.ceil(Math.max(titleWidth, dateWidth, 110)), 110), 360);
+        }
+
+        function getAdaptiveEventWidth(info, allInfos, viewportWidth) {
+            const SAME_LANE_TOLERANCE = 8;
+            const GAP = 12;
+            const nextInLane = allInfos
+                .filter(other => other !== info && Math.abs(other.topPos - info.topPos) <= SAME_LANE_TOLERANCE && other.x > info.x)
+                .sort((a, b) => a.x - b.x)[0];
+            const availableUntilNext = nextInLane ? (nextInLane.x - info.x - GAP) : Infinity;
+            const availableOnScreen = Math.max(60, viewportWidth + 220 - info.x);
+            const maxAllowed = Math.min(availableUntilNext, availableOnScreen, 360);
+            const preferred = Math.max(info.durationWidth, info.estimatedTextWidth);
+            return Math.max(60, Math.min(preferred, maxAllowed));
+        }
+
         function renderTimeline() {
             if (!currentTimeline) return;
             rulerLayer.innerHTML = ''; gridLayer.innerHTML = ''; eventsLayer.innerHTML = '';
@@ -936,24 +968,34 @@
                 if (year % (step * 2) === 0 || step === 1) { const grid = document.createElement('div'); grid.className = 'grid-line'; grid.style.left = `${x}px`; gridLayer.appendChild(grid); }
             }
 
-            const visibleEvents = events.filter(e => { const x1 = getX(e.start); const x2 = e.end ? getX(e.end) : x1 + 100; return x2 > -200 && x1 < w + 200; });
+            const visibleEvents = events.filter(e => { 
+                const x1 = getX(e.start); 
+                const x2 = x1 + Math.max(getEventDurationWidth(e, viewState.pixelsPerYear), 110);
+                return x2 > -260 && x1 < w + 260; 
+            });
             
-            visibleEvents.forEach(ev => {
-                const x = getX(ev.start); 
-                let widthStyle = '';
-                if (ev.end) { 
-                    const calculatedWidth = (ev.end - ev.start) * viewState.pixelsPerYear; 
-                    const finalWidth = Math.max(calculatedWidth, 20); 
-                    widthStyle = `width: ${finalWidth}px;`;
-                } else { widthStyle = `width: auto; min-width: 100px; max-width: 300px;`; }
-                
+            const renderInfos = visibleEvents.map(ev => {
+                const dateLabel = ev.displayDate || ev.start.toFixed(0);
+                const x = getX(ev.start);
                 const topPos = (ev._top !== undefined) ? ev._top : (layoutPositions.get(ev.id) || 70);
+                return {
+                    ev,
+                    x,
+                    topPos,
+                    dateLabel,
+                    durationWidth: getEventDurationWidth(ev, viewState.pixelsPerYear),
+                    estimatedTextWidth: estimateEventCardWidth(ev, dateLabel)
+                };
+            }).sort((a, b) => a.x - b.x);
+
+            renderInfos.forEach(info => {
+                const { ev, x, topPos, dateLabel } = info;
+                const finalWidth = getAdaptiveEventWidth(info, renderInfos, w);
+                const hoverWidth = getAdaptiveEventWidth({ ...info, estimatedTextWidth: Math.max(info.estimatedTextWidth, 250) }, renderInfos, w);
                 
                 const el = document.createElement('div'); 
                 el.className = 'event-card'; 
-                el.style = `${widthStyle} left: ${x}px; top: ${topPos}px; border-left-color: ${ev.color}; --event-color: ${ev.color};`;
-                
-                const dateLabel = ev.displayDate || ev.start.toFixed(0);
+                el.style = `width: ${finalWidth}px; left: ${x}px; top: ${topPos}px; border-left-color: ${ev.color}; --event-color: ${ev.color}; --card-width: ${finalWidth}px; --hover-width: ${hoverWidth}px;`;
                 
                 el.innerHTML = `
                     <div class="card-preview">
