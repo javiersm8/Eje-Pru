@@ -609,7 +609,7 @@
                     <input type="file" id="import-file" accept=".csv,.txt" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
                     <div class="text-[10px] text-slate-400 mt-2 space-y-1">
                         <p>Formatos aceptados: <span class="font-semibold">Nombre, Fecha</span> o <span class="font-semibold">Nombre; Fecha</span></p>
-                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Año solo: Evento, 2000 → 1 enero 2000</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Año solo: Evento, 2000 → se coloca en 1 enero, pero se ve como 2000</p>
                         <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Mes y año: Evento, 03/2000 → marzo 2000</p>
                         <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Día exacto: Evento, 01/03/2000 → 1 marzo 2000</p>
                         <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Intervalo años: Evento, From 1990 Until 2000</p>
@@ -1539,6 +1539,7 @@
                     end,
                     displayDate: `${formatDayMonthYear(d1, m1, y1)} - ${formatDayMonthYear(d2, m2, y2)}`,
                     realDateStart: { y: y1, m: m1, d: d1 },
+                    datePrecision: 'day-interval',
                     realDateEnd: { y: y2, m: m2, d: d2 }
                 };
             }
@@ -1554,6 +1555,7 @@
                     end,
                     displayDate: `${y1} - ${y2}`,
                     realDateStart: { y: y1, m: 1, d: 1 },
+                    datePrecision: 'year-interval',
                     realDateEnd: { y: y2, m: 1, d: 1 }
                 };
             }
@@ -1567,6 +1569,7 @@
                     end: null,
                     displayDate: formatDayMonthYear(d, m, y),
                     realDateStart: { y, m, d },
+                    datePrecision: 'day',
                     realDateEnd: null
                 };
             }
@@ -1580,6 +1583,7 @@
                     end: null,
                     displayDate: formatMonthYear(m, y),
                     realDateStart: { y, m, d: 1 },
+                    datePrecision: 'month',
                     realDateEnd: null
                 };
             }
@@ -1591,8 +1595,9 @@
                 return {
                     start,
                     end: null,
-                    displayDate: formatDayMonthYear(1, 1, y),
+                    displayDate: String(y),
                     realDateStart: { y, m: 1, d: 1 },
+                    datePrecision: 'year',
                     realDateEnd: null
                 };
             }
@@ -1621,6 +1626,7 @@
                     displayDate: parsedDate.displayDate,
                     realDateStart: parsedDate.realDateStart,
                     realDateEnd: parsedDate.realDateEnd,
+                    ...(parsedDate.datePrecision ? { datePrecision: parsedDate.datePrecision } : {}),
                     color: colors[Math.floor(Math.random() * colors.length)]
                 });
             });
