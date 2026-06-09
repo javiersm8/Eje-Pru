@@ -522,6 +522,9 @@
 
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
+        // Igual que en el catálogo que sí funciona, usamos Firestore compat.
+        // Además, ignoramos posibles campos undefined para que Firestore no rechace el guardado.
+        firebase.firestore().settings({ ignoreUndefinedProperties: true });
         const db = firebase.firestore();
 
         // --- ESTADO ---
@@ -653,6 +656,49 @@
         });
 
         // --- BASE DE DATOS (CLOUD FIRESTORE) ---
+        function createEmptyTimelineData() {
+            return [];
+        }
+
+        function cleanForFirestore(value) {
+            if (Array.isArray(value)) {
+                return value
+                    .filter(item => item !== undefined)
+                    .map(item => cleanForFirestore(item));
+            }
+            if (value && typeof value === 'object') {
+                const cleaned = {};
+                Object.keys(value).forEach(key => {
+                    if (value[key] !== undefined) cleaned[key] = cleanForFirestore(value[key]);
+                });
+                return cleaned;
+            }
+            return value;
+        }
+
+        function normalizeTimelineData(items) {
+            if (!Array.isArray(items)) return createEmptyTimelineData();
+            return items.map(item => {
+                if (item.type === 'folder') {
+                    return {
+                        id: item.id,
+                        type: 'folder',
+                        name: item.name || 'Carpeta sin nombre',
+                        items: normalizeTimelineData(item.items || [])
+                    };
+                }
+                if (item.type === 'timeline') {
+                    return {
+                        id: item.id,
+                        type: 'timeline',
+                        name: item.name || 'Eje sin nombre',
+                        events: Array.isArray(item.events) ? item.events.map(ev => cleanForFirestore(ev)) : []
+                    };
+                }
+                return cleanForFirestore(item);
+            });
+        }
+
         async function loadCloudData() {
             showToast('loading', 'Sincronizando...');
             try {
@@ -660,45 +706,55 @@
                 const docSnap = await docRef.get();
 
                 if (docSnap.exists) {
-                    const data = docSnap.data();
-                    if (data.timelineData) {
-                        fileSystem = data.timelineData;
-                    } else {
-                        fileSystem = [
-                            { id: 'f1', type: 'folder', name: 'Ejemplos', items: [] },
-                            { id: 't1', type: 'timeline', name: 'Mi primer Eje', events: [] }
-                        ];
-                        await docRef.set({ timelineData: fileSystem }, { merge: true });
-                    }
+                    const data = docSnap.data() || {};
+                    fileSystem = normalizeTimelineData(data.timelineData || []);
                     showToast('success', 'Datos cargados');
                 } else {
-                    fileSystem = [];
-                    await docRef.set({ timelineData: fileSystem }); 
+                    fileSystem = createEmptyTimelineData();
+                    await docRef.set({ timelineData: cleanForFirestore(fileSystem) }, { merge: true });
                     showToast('success', 'Bienvenido');
                 }
                 currentFolderContent = fileSystem;
                 renderHub();
             } catch (error) {
                 console.error("Error cargando:", error);
-                showToast('error', 'Error de conexión');
+                showToast('error', 'Error de conexión: ' + (error.code || error.message || 'desconocido'));
             }
         }
 
         async function saveToDisk() {
             if (!currentUser) return;
             clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(async () => {
-                showToast('loading', 'Guardando...');
-                try {
-                    await db.collection('usuarios').doc(currentUser.uid).set({
-                        timelineData: fileSystem
-                    }, { merge: true });
-                    showToast('success', 'Guardado');
-                } catch (error) {
-                    console.error("Error guardando:", error);
-                    showToast('error', 'No se pudo guardar');
+            showToast('loading', 'Guardando...');
+            try {
+                fileSystem = normalizeTimelineData(fileSystem);
+                currentFolderContent = currentPath.reduce((items, folder) => {
+                    const found = items.find(item => item.id == folder.id && item.type === 'folder');
+                    return found ? found.items : items;
+                }, fileSystem);
+                if (currentTimeline) {
+                    const refreshedTimeline = findItemById(fileSystem, currentTimeline.id, 'timeline');
+                    if (refreshedTimeline) currentTimeline = refreshedTimeline;
                 }
-            }, 1000); 
+                await db.collection('usuarios').doc(currentUser.uid).set({
+                    timelineData: cleanForFirestore(fileSystem)
+                }, { merge: true });
+                showToast('success', 'Guardado');
+            } catch (error) {
+                console.error("Error guardando:", error);
+                showToast('error', 'No se pudo guardar: ' + (error.code || error.message || 'desconocido'));
+            }
+        }
+
+        function findItemById(items, id, type = null) {
+            for (const item of items || []) {
+                if (item.id == id && (!type || item.type === type)) return item;
+                if (item.type === 'folder') {
+                    const found = findItemById(item.items || [], id, type);
+                    if (found) return found;
+                }
+            }
+            return null;
         }
 
         function showToast(type, msg) {
@@ -839,7 +895,9 @@
             e.preventDefault();
             const type = document.getElementById('create-type').value;
             const name = document.getElementById('create-name').value;
-            const newItem = { id: Date.now().toString(), type: type, name: name, items: type === 'folder' ? [] : undefined, events: type === 'timeline' ? [] : undefined };
+            const newItem = type === 'folder'
+                ? { id: Date.now().toString(), type: 'folder', name: name, items: [] }
+                : { id: Date.now().toString(), type: 'timeline', name: name, events: [] };
             
             if (type === 'timeline') {
                 const fileInput = document.getElementById('import-file');
