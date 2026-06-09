@@ -172,6 +172,8 @@
         .flashcard-inner.flipped { transform: rotateY(180deg); }
         .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; -webkit-backface-visibility: hidden; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 1.5rem; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.2); }
         .flashcard-back { transform: rotateY(180deg); }
+        .flashcard-inner.card-switching .flashcard-front,
+        .flashcard-inner.card-switching .flashcard-back { opacity: 0; }
 
         :fullscreen #timeline-view { background: white; }
         :fullscreen #timeline-view.dark { background: #0f172a; }
@@ -430,9 +432,12 @@
                     </div>
                     <input type="file" id="import-file" accept=".csv,.txt" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
                     <div class="text-[10px] text-slate-400 mt-2 space-y-1">
-                        <p>Formatos aceptados (Nombre, Fecha):</p>
-                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Evento, From 1990 Until 2000</p>
-                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Evento, 01/01/2000</p>
+                        <p>Formatos aceptados: <span class="font-semibold">Nombre, Fecha</span> o <span class="font-semibold">Nombre; Fecha</span></p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Año solo: Evento, 2000 → 1 enero 2000</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Mes y año: Evento, 03/2000 → marzo 2000</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Día exacto: Evento, 01/03/2000 → 1 marzo 2000</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Intervalo años: Evento, From 1990 Until 2000</p>
+                        <p class="font-mono text-xs bg-slate-100 dark:bg-slate-900 p-1 rounded">Intervalo exacto: Evento, 01/03/2000 - 15/04/2000</p>
                     </div>
                 </div>
                 <div class="flex justify-end gap-2">
@@ -707,7 +712,6 @@
             const finalMsg = `No se pudo guardar${code ? ' [' + code + ']' : ''}: ${message}${extra ? '\n\n' + extra : ''}`;
             console.error('Error guardando en Firestore:', error, extra);
             showToast('error', finalMsg);
-            alert(finalMsg);
         }
 
         function normalizeTimelineData(items) {
@@ -1184,9 +1188,151 @@
         function changeZoom(factor) { const w = viewport.clientWidth; const centerYear = (w/2 - viewState.offsetX) / viewState.pixelsPerYear; viewState.pixelsPerYear *= factor; if(viewState.pixelsPerYear < 5) viewState.pixelsPerYear = 5; if(viewState.pixelsPerYear > 300) viewState.pixelsPerYear = 300; viewState.offsetX = (w/2) - (centerYear * viewState.pixelsPerYear); renderTimeline(); document.getElementById('zoom-level').innerText = Math.round(viewState.pixelsPerYear) + '%'; }
         function toggleTheme() { document.documentElement.classList.toggle('dark'); }
 
+        const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+        function isValidMonth(m) {
+            return Number.isInteger(m) && m >= 1 && m <= 12;
+        }
+
+        function isValidDay(d) {
+            return Number.isInteger(d) && d >= 1 && d <= 31;
+        }
+
+        function datePartsToDecimal(y, m = 1, d = 1) {
+            y = parseFloat(y);
+            m = parseInt(m || 1, 10);
+            d = parseInt(d || 1, 10);
+            if (isNaN(y) || !isValidMonth(m) || !isValidDay(d)) return null;
+            return y + ((((m - 1) * 30.4) + (d - 1)) / 365.25);
+        }
+
+        function formatDayMonthYear(d, m, y) {
+            d = parseInt(d, 10);
+            m = parseInt(m, 10);
+            y = parseInt(y, 10);
+            if (!isValidDay(d) || !isValidMonth(m) || isNaN(y)) return '';
+            return `${d} ${monthNames[m - 1]} ${y}`;
+        }
+
+        function formatMonthYear(m, y) {
+            m = parseInt(m, 10);
+            y = parseInt(y, 10);
+            if (!isValidMonth(m) || isNaN(y)) return '';
+            return `${monthNames[m - 1]} ${y}`;
+        }
+
+        function splitCSVLine(line) {
+            // El importador admite coma o punto y coma. Usamos el primer separador que aparezca.
+            const separator = line.includes(';') ? ';' : ',';
+            const parts = line.split(separator);
+            if (parts.length < 2) return null;
+            return { name: parts[0].trim(), dateStr: parts.slice(1).join(separator).trim() };
+        }
+
+        function parseCSVDate(dateStr) {
+            const cleaned = dateStr.trim();
+            const exactInterval = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(-?\d{1,6})\s*(?:-|–|—|hasta|to|until)\s*(\d{1,2})\/(\d{1,2})\/(-?\d{1,6})$/i);
+            const yearInterval = cleaned.match(/^From\s+(-?\d{1,6})\s+Until\s+(-?\d{1,6})$/i);
+            const exactDate = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(-?\d{1,6})$/);
+            const monthYear = cleaned.match(/^(\d{1,2})\/(-?\d{1,6})$/);
+            const yearOnly = cleaned.match(/^-?\d{1,6}$/);
+
+            if (exactInterval) {
+                const d1 = parseInt(exactInterval[1], 10), m1 = parseInt(exactInterval[2], 10), y1 = parseInt(exactInterval[3], 10);
+                const d2 = parseInt(exactInterval[4], 10), m2 = parseInt(exactInterval[5], 10), y2 = parseInt(exactInterval[6], 10);
+                const start = datePartsToDecimal(y1, m1, d1);
+                const end = datePartsToDecimal(y2, m2, d2);
+                if (start === null || end === null) return null;
+                return {
+                    start,
+                    end,
+                    displayDate: `${formatDayMonthYear(d1, m1, y1)} - ${formatDayMonthYear(d2, m2, y2)}`,
+                    realDateStart: { y: y1, m: m1, d: d1 },
+                    realDateEnd: { y: y2, m: m2, d: d2 }
+                };
+            }
+
+            if (yearInterval) {
+                const y1 = parseInt(yearInterval[1], 10);
+                const y2 = parseInt(yearInterval[2], 10);
+                const start = datePartsToDecimal(y1, 1, 1);
+                const end = datePartsToDecimal(y2, 1, 1);
+                if (start === null || end === null) return null;
+                return {
+                    start,
+                    end,
+                    displayDate: `${y1} - ${y2}`,
+                    realDateStart: { y: y1, m: 1, d: 1 },
+                    realDateEnd: { y: y2, m: 1, d: 1 }
+                };
+            }
+
+            if (exactDate) {
+                const d = parseInt(exactDate[1], 10), m = parseInt(exactDate[2], 10), y = parseInt(exactDate[3], 10);
+                const start = datePartsToDecimal(y, m, d);
+                if (start === null) return null;
+                return {
+                    start,
+                    end: null,
+                    displayDate: formatDayMonthYear(d, m, y),
+                    realDateStart: { y, m, d },
+                    realDateEnd: null
+                };
+            }
+
+            if (monthYear) {
+                const m = parseInt(monthYear[1], 10), y = parseInt(monthYear[2], 10);
+                const start = datePartsToDecimal(y, m, 1);
+                if (start === null) return null;
+                return {
+                    start,
+                    end: null,
+                    displayDate: formatMonthYear(m, y),
+                    realDateStart: { y, m, d: 1 },
+                    realDateEnd: null
+                };
+            }
+
+            if (yearOnly) {
+                const y = parseInt(cleaned, 10);
+                const start = datePartsToDecimal(y, 1, 1);
+                if (start === null) return null;
+                return {
+                    start,
+                    end: null,
+                    displayDate: formatDayMonthYear(1, 1, y),
+                    realDateStart: { y, m: 1, d: 1 },
+                    realDateEnd: null
+                };
+            }
+
+            return null;
+        }
+
         function parseCSV(text) {
-            const lines = text.split(/\r\n|\n/); const events = []; const regexFromUntil = /From\s+(\d+)\s+Until\s+(\d+)/i; const regexDateSlash = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
-            lines.forEach(line => { if (!line.trim()) return; let parts; if (line.includes(';')) parts = line.split(';'); else parts = line.split(','); if (parts.length >= 2) { const name = parts[0].trim(); let dateStr = parts.slice(1).join(',').trim(); let startVal = null, endVal = null, display = dateStr; let realStart = null; const matchFrom = dateStr.match(regexFromUntil); if (matchFrom) { startVal = parseFloat(matchFrom[1]); endVal = parseFloat(matchFrom[2]); display = `${startVal} - ${endVal}`; } else { const matchSlash = dateStr.match(regexDateSlash); if (matchSlash) { const d = parseInt(matchSlash[1]); const m = parseInt(matchSlash[2]); const y = parseInt(matchSlash[3]); startVal = dateToDecimal(y, m, d); realStart = { d, m, y }; display = `${d}/${m}/${y}`; } else { const y = parseFloat(dateStr); if (!isNaN(y)) { startVal = y; display = y.toString(); } } } if (startVal !== null) { events.push({ id: Date.now() + Math.random(), name: name, start: startVal, end: endVal, displayDate: display, realDateStart: realStart, color: colors[Math.floor(Math.random()*colors.length)] }); } } });
+            const lines = text.split(/\r\n|\n/);
+            const events = [];
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                const parsedLine = splitCSVLine(line);
+                if (!parsedLine) return;
+                const { name, dateStr } = parsedLine;
+                if (!name || /^nombre$/i.test(name)) return;
+
+                const parsedDate = parseCSVDate(dateStr);
+                if (!parsedDate) return;
+
+                events.push({
+                    id: Date.now() + Math.random(),
+                    name: name,
+                    start: parsedDate.start,
+                    end: parsedDate.end,
+                    displayDate: parsedDate.displayDate,
+                    realDateStart: parsedDate.realDateStart,
+                    realDateEnd: parsedDate.realDateEnd,
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            });
             return events;
         }
 
@@ -1249,13 +1395,25 @@
             }
         }
 
-        function showNextCard() {
-            if (learnSession.queue.length === 0) { finishSession(); return; }
-            learnSession.currentCard = learnSession.queue.shift();
-            document.getElementById('learn-progress').innerText = `${learnSession.completed}/${learnSession.total}`;
+        function showNextCard({ waitForFlip = false } = {}) {
             const card = document.getElementById('flashcard');
-            card.classList.remove('flipped');
-            renderCardContent();
+            const loadNext = () => {
+                if (learnSession.queue.length === 0) { finishSession(); return; }
+                learnSession.currentCard = learnSession.queue.shift();
+                document.getElementById('learn-progress').innerText = `${learnSession.completed}/${learnSession.total}`;
+                renderCardContent();
+                card.classList.remove('card-switching');
+            };
+
+            if (waitForFlip && card.classList.contains('flipped')) {
+                // Evita que se vea brevemente el reverso de la siguiente tarjeta durante la animación.
+                card.classList.add('card-switching');
+                card.classList.remove('flipped');
+                setTimeout(loadNext, 300);
+            } else {
+                card.classList.remove('flipped');
+                loadNext();
+            }
         }
 
         function renderCardContent() {
@@ -1285,7 +1443,7 @@
         function processAnswer(known) {
             if (known) { learnSession.completed++; } 
             else { const insertAt = Math.floor(Math.random() * (learnSession.queue.length)) + 1; learnSession.queue.splice(insertAt, 0, learnSession.currentCard); }
-            showNextCard();
+            showNextCard({ waitForFlip: true });
         }
 
         function finishSession() {
