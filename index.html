@@ -676,6 +676,40 @@
             return value;
         }
 
+        function estimateFirestorePayloadBytes(payload) {
+            try {
+                return new Blob([JSON.stringify(payload)]).size;
+            } catch (error) {
+                return JSON.stringify(payload).length;
+            }
+        }
+
+        function findLargeEmbeddedImages(items, path = []) {
+            const found = [];
+            (items || []).forEach(item => {
+                const currentPath = path.concat(item.name || item.id || 'Elemento');
+                if (item.type === 'folder') {
+                    found.push(...findLargeEmbeddedImages(item.items || [], currentPath));
+                } else if (item.type === 'timeline') {
+                    (item.events || []).forEach(ev => {
+                        if (ev.img && typeof ev.img === 'string' && ev.img.startsWith('data:') && ev.img.length > 100000) {
+                            found.push({ path: currentPath.join(' / '), event: ev.name || 'Evento sin nombre', size: ev.img.length });
+                        }
+                    });
+                }
+            });
+            return found;
+        }
+
+        function reportSaveError(error, extra = '') {
+            const code = error && error.code ? error.code : '';
+            const message = error && error.message ? error.message : String(error || 'desconocido');
+            const finalMsg = `No se pudo guardar${code ? ' [' + code + ']' : ''}: ${message}${extra ? '\n\n' + extra : ''}`;
+            console.error('Error guardando en Firestore:', error, extra);
+            showToast('error', finalMsg);
+            alert(finalMsg);
+        }
+
         function normalizeTimelineData(items) {
             if (!Array.isArray(items)) return createEmptyTimelineData();
             return items.map(item => {
@@ -723,26 +757,44 @@
         }
 
         async function saveToDisk() {
-            if (!currentUser) return;
+            if (!currentUser) {
+                showToast('error', 'No hay usuario conectado. Vuelve a iniciar sesión.');
+                return;
+            }
+
             clearTimeout(saveTimeout);
             showToast('loading', 'Guardando...');
+
             try {
                 fileSystem = normalizeTimelineData(fileSystem);
+
                 currentFolderContent = currentPath.reduce((items, folder) => {
                     const found = items.find(item => item.id == folder.id && item.type === 'folder');
                     return found ? found.items : items;
                 }, fileSystem);
+
                 if (currentTimeline) {
                     const refreshedTimeline = findItemById(fileSystem, currentTimeline.id, 'timeline');
                     if (refreshedTimeline) currentTimeline = refreshedTimeline;
                 }
-                await db.collection('usuarios').doc(currentUser.uid).set({
-                    timelineData: cleanForFirestore(fileSystem)
-                }, { merge: true });
+
+                const payload = { timelineData: cleanForFirestore(fileSystem) };
+                const approxBytes = estimateFirestorePayloadBytes(payload);
+                const largeImages = findLargeEmbeddedImages(fileSystem);
+                console.log('Guardando timelineData en usuarios/' + currentUser.uid, { approxBytes, largeImages, payload });
+
+                // Firestore tiene un límite de documento de 1 MiB. Dejamos margen por metadatos/nombres de campos.
+                if (approxBytes > 900000) {
+                    const details = largeImages.length
+                        ? 'Hay imágenes subidas incrustadas en eventos. Usa URL de imagen o Firebase Storage para esas imágenes. Primer evento grande: ' + largeImages[0].event
+                        : 'Hay demasiados datos en este eje para guardarlo como un único documento.';
+                    throw new Error(`El documento pesa aproximadamente ${Math.round(approxBytes / 1024)} KB y Firestore solo permite cerca de 1024 KB. ${details}`);
+                }
+
+                await db.collection('usuarios').doc(currentUser.uid).set(payload, { merge: true });
                 showToast('success', 'Guardado');
             } catch (error) {
-                console.error("Error guardando:", error);
-                showToast('error', 'No se pudo guardar: ' + (error.code || error.message || 'desconocido'));
+                reportSaveError(error);
             }
         }
 
