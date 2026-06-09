@@ -203,20 +203,21 @@
 
         /* Vista lista y exportación PDF */
         .timeline-list-shell {
-            max-width: 1000px;
+            max-width: 900px;
             margin: 0 auto;
         }
         .timeline-list-item {
             position: relative;
             display: grid;
-            grid-template-columns: 180px 1fr;
-            gap: 1rem;
-            padding: 1rem;
+            grid-template-columns: 118px 1fr auto;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.45rem 0.65rem;
             border: 1px solid #e2e8f0;
-            border-left: 6px solid var(--event-color, #6366f1);
-            border-radius: 0.9rem;
+            border-left: 4px solid var(--event-color, #6366f1);
+            border-radius: 0.55rem;
             background: white;
-            box-shadow: 0 8px 18px -18px rgba(15, 23, 42, 0.35);
+            box-shadow: 0 5px 12px -14px rgba(15, 23, 42, 0.35);
             break-inside: avoid;
             page-break-inside: avoid;
         }
@@ -225,31 +226,74 @@
             border-color: #334155;
         }
         .timeline-list-date {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-width: 0;
+            font-size: 0.78rem;
             font-weight: 800;
             color: #475569;
-            line-height: 1.25;
+            line-height: 1.15;
+            white-space: nowrap;
         }
         .dark .timeline-list-date { color: #cbd5e1; }
+        .timeline-list-index {
+            width: 1.35rem;
+            flex: 0 0 auto;
+            font-size: 0.65rem;
+            color: #94a3b8;
+            font-weight: 900;
+        }
         .timeline-list-dot {
-            width: 0.8rem;
-            height: 0.8rem;
+            width: 0.5rem;
+            height: 0.5rem;
             border-radius: 9999px;
             background: var(--event-color, #6366f1);
             display: inline-block;
-            margin-right: 0.35rem;
-            vertical-align: middle;
+            flex: 0 0 auto;
         }
+        .timeline-list-main {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .timeline-list-title {
+            min-width: 0;
+            flex: 1;
+            font-size: 0.92rem;
+            font-weight: 750;
+            color: #1e293b;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .dark .timeline-list-title { color: #ffffff; }
+        .timeline-list-type {
+            flex: 0 0 auto;
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #64748b;
+            background: #f1f5f9;
+            border-radius: 9999px;
+            padding: 0.15rem 0.45rem;
+        }
+        .dark .timeline-list-type { color: #cbd5e1; background: #334155; }
         .timeline-list-img {
-            width: 72px;
-            height: 72px;
-            border-radius: 0.75rem;
+            width: 34px;
+            height: 34px;
+            border-radius: 0.4rem;
             object-fit: cover;
             flex-shrink: 0;
             border: 1px solid #e2e8f0;
         }
         .dark .timeline-list-img { border-color: #334155; }
         @media (max-width: 720px) {
-            .timeline-list-item { grid-template-columns: 1fr; }
+            .timeline-list-item { grid-template-columns: 1fr auto; }
+            .timeline-list-date { grid-column: 1 / -1; }
+            .timeline-list-type { display: none; }
         }
         body.printing-timeline-list {
             overflow: visible !important;
@@ -293,10 +337,10 @@
             color: #111827 !important;
         }
         @media print {
-            @page { margin: 14mm; }
+            @page { margin: 10mm; }
             body { overflow: visible !important; }
             body.printing-timeline-list .timeline-list-item {
-                margin-bottom: 10px;
+                margin-bottom: 4px;
             }
         }
 
@@ -451,12 +495,12 @@
                 </div>
             </main>
 
-            <section id="timeline-list-view" class="hidden flex-1 overflow-y-auto bg-slate-50 dark:bg-dark-bg p-6">
+            <section id="timeline-list-view" class="hidden flex-1 overflow-y-auto bg-slate-50 dark:bg-dark-bg p-3">
                 <div class="timeline-list-shell">
-                    <div class="no-print mb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div class="no-print mb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                         <div>
-                            <h3 id="timeline-list-heading" class="text-2xl font-bold text-slate-800 dark:text-white">Vista lista</h3>
-                            <p id="timeline-list-summary" class="text-sm text-slate-500 dark:text-slate-400 mt-1"></p>
+                            <h3 id="timeline-list-heading" class="text-xl font-bold text-slate-800 dark:text-white">Vista lista</h3>
+                            <p id="timeline-list-summary" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
                         </div>
                         <div class="flex gap-2">
                             <button onclick="setTimelineDisplayMode('axis')" class="px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition text-sm font-medium">
@@ -467,11 +511,11 @@
                             </button>
                         </div>
                     </div>
-                    <div id="timeline-list-print-header" class="hidden mb-6">
-                        <h1 id="timeline-list-print-title" class="text-3xl font-bold"></h1>
+                    <div id="timeline-list-print-header" class="hidden mb-3">
+                        <h1 id="timeline-list-print-title" class="text-2xl font-bold"></h1>
                         <p id="timeline-list-print-subtitle" class="text-sm text-slate-500 mt-1"></p>
                     </div>
-                    <div id="timeline-list-content" class="space-y-3"></div>
+                    <div id="timeline-list-content" class="space-y-1.5"></div>
                 </div>
             </section>
         </div>
@@ -1246,22 +1290,20 @@
                 item.className = 'timeline-list-item';
                 item.style.setProperty('--event-color', color);
                 item.innerHTML = `
-                    <div class="timeline-list-date">
-                        <div class="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">${String(index + 1).padStart(2, '0')}</div>
-                        <div><span class="timeline-list-dot"></span>${escapeHTML(dateLabel)}</div>
-                        <div class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">${getEventTypeLabel(ev)}</div>
+                    <div class="timeline-list-date" title="${escapeHTML(dateLabel)}">
+                        <span class="timeline-list-index">${String(index + 1).padStart(2, '0')}</span>
+                        <span class="timeline-list-dot"></span>
+                        <span class="truncate">${escapeHTML(dateLabel)}</span>
                     </div>
-                    <div class="min-w-0 flex gap-4">
+                    <div class="timeline-list-main">
                         ${ev.img ? `<img src="${escapeHTML(ev.img)}" class="timeline-list-img" alt="">` : ''}
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-start justify-between gap-3">
-                                <h4 class="text-lg font-bold text-slate-800 dark:text-white break-words">${escapeHTML(ev.name || 'Sin título')}</h4>
-                                <button onclick="openEventModalById('${escapeHTML(ev.id)}')" class="list-edit-btn no-print text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 hover:bg-indigo-100 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 shrink-0" title="Editar evento">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                            </div>
-                            ${ev.end ? `<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Duración representada desde ${escapeHTML(dateLabel.split(' - ')[0] || dateLabel)}${dateLabel.includes(' - ') ? ` hasta ${escapeHTML(dateLabel.split(' - ').slice(1).join(' - '))}` : ''}.</p>` : `<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Colocado cronológicamente en el eje como fecha puntual.</p>`}
-                        </div>
+                        <span class="timeline-list-title" title="${escapeHTML(ev.name || 'Sin título')}">${escapeHTML(ev.name || 'Sin título')}</span>
+                    </div>
+                    <div class="flex items-center gap-2 justify-end">
+                        <span class="timeline-list-type">${getEventTypeLabel(ev)}</span>
+                        <button onclick="openEventModalById('${escapeHTML(ev.id)}')" class="list-edit-btn no-print text-xs w-7 h-7 rounded bg-slate-100 dark:bg-slate-700 hover:bg-indigo-100 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 shrink-0" title="Editar evento">
+                            <i class="fas fa-edit"></i>
+                        </button>
                     </div>
                 `;
                 content.appendChild(item);
