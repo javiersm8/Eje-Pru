@@ -200,6 +200,106 @@
         .status-loading { background: #3b82f6; color: white; }
         .status-success { background: #10b981; color: white; }
         .status-error { background: #ef4444; color: white; }
+
+        /* Vista lista y exportación PDF */
+        .timeline-list-shell {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .timeline-list-item {
+            position: relative;
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            border: 1px solid #e2e8f0;
+            border-left: 6px solid var(--event-color, #6366f1);
+            border-radius: 0.9rem;
+            background: white;
+            box-shadow: 0 8px 18px -18px rgba(15, 23, 42, 0.35);
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .dark .timeline-list-item {
+            background: #1e293b;
+            border-color: #334155;
+        }
+        .timeline-list-date {
+            font-weight: 800;
+            color: #475569;
+            line-height: 1.25;
+        }
+        .dark .timeline-list-date { color: #cbd5e1; }
+        .timeline-list-dot {
+            width: 0.8rem;
+            height: 0.8rem;
+            border-radius: 9999px;
+            background: var(--event-color, #6366f1);
+            display: inline-block;
+            margin-right: 0.35rem;
+            vertical-align: middle;
+        }
+        .timeline-list-img {
+            width: 72px;
+            height: 72px;
+            border-radius: 0.75rem;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid #e2e8f0;
+        }
+        .dark .timeline-list-img { border-color: #334155; }
+        @media (max-width: 720px) {
+            .timeline-list-item { grid-template-columns: 1fr; }
+        }
+        body.printing-timeline-list {
+            overflow: visible !important;
+            background: white !important;
+        }
+        body.printing-timeline-list > *:not(#appInterface),
+        body.printing-timeline-list #hub-view,
+        body.printing-timeline-list #learn-view,
+        body.printing-timeline-list #timeline-view > header,
+        body.printing-timeline-list #viewport,
+        body.printing-timeline-list #statusToast {
+            display: none !important;
+        }
+        body.printing-timeline-list #appInterface,
+        body.printing-timeline-list #timeline-view,
+        body.printing-timeline-list #timeline-list-view {
+            display: block !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            color: #111827 !important;
+        }
+        body.printing-timeline-list #timeline-list-view {
+            padding: 0 !important;
+        }
+        body.printing-timeline-list .timeline-list-shell {
+            max-width: none !important;
+            margin: 0 !important;
+        }
+        body.printing-timeline-list .no-print,
+        body.printing-timeline-list .list-edit-btn {
+            display: none !important;
+        }
+        body.printing-timeline-list .timeline-list-item {
+            box-shadow: none !important;
+            background: white !important;
+            color: #111827 !important;
+        }
+        body.printing-timeline-list .timeline-list-date,
+        body.printing-timeline-list .timeline-list-item * {
+            color: #111827 !important;
+        }
+        @media print {
+            @page { margin: 14mm; }
+            body { overflow: visible !important; }
+            body.printing-timeline-list .timeline-list-item {
+                margin-bottom: 10px;
+            }
+        }
+
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-dark-bg dark:text-slate-100 h-screen flex flex-col overflow-hidden transition-colors duration-300">
@@ -322,7 +422,15 @@
                         <button onclick="changeZoom(1.25)" class="w-7 h-7 flex items-center justify-center rounded hover:bg-white dark:hover:bg-slate-700 transition dark:text-slate-300"><i class="fas fa-plus text-xs"></i></button>
                     </div>
 
-                    <button onclick="toggleFullScreen()" class="w-9 h-9 flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition mr-2" title="Pantalla Completa">
+                    <button onclick="toggleTimelineListView()" id="timeline-mode-btn" class="h-9 flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition px-3 gap-2 text-sm font-medium" title="Ver como lista">
+                        <i id="timeline-mode-icon" class="fas fa-list"></i><span id="timeline-mode-text" class="hidden md:inline">Lista</span>
+                    </button>
+
+                    <button onclick="exportTimelineListToPDF()" class="h-9 flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-slate-700 text-rose-600 dark:text-rose-300 transition px-3 gap-2 text-sm font-medium" title="Exportar lista a PDF">
+                        <i class="fas fa-file-pdf"></i><span class="hidden md:inline">PDF</span>
+                    </button>
+
+                    <button onclick="toggleFullScreen()" id="fullscreen-btn" class="w-9 h-9 flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition mr-2" title="Pantalla Completa">
                         <i class="fas fa-expand"></i>
                     </button>
 
@@ -342,6 +450,30 @@
                     </div>
                 </div>
             </main>
+
+            <section id="timeline-list-view" class="hidden flex-1 overflow-y-auto bg-slate-50 dark:bg-dark-bg p-6">
+                <div class="timeline-list-shell">
+                    <div class="no-print mb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div>
+                            <h3 id="timeline-list-heading" class="text-2xl font-bold text-slate-800 dark:text-white">Vista lista</h3>
+                            <p id="timeline-list-summary" class="text-sm text-slate-500 dark:text-slate-400 mt-1"></p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="setTimelineDisplayMode('axis')" class="px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition text-sm font-medium">
+                                <i class="fas fa-stream mr-2"></i>Volver al eje
+                            </button>
+                            <button onclick="exportTimelineListToPDF()" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow text-sm font-bold">
+                                <i class="fas fa-file-pdf mr-2"></i>Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                    <div id="timeline-list-print-header" class="hidden mb-6">
+                        <h1 id="timeline-list-print-title" class="text-3xl font-bold"></h1>
+                        <p id="timeline-list-print-subtitle" class="text-sm text-slate-500 mt-1"></p>
+                    </div>
+                    <div id="timeline-list-content" class="space-y-3"></div>
+                </div>
+            </section>
         </div>
 
         <div id="learn-view" class="h-full flex flex-col hidden bg-slate-100 dark:bg-dark-bg">
@@ -539,6 +671,7 @@
         let currentTimeline = null; 
         let currentFolderContent = []; 
         let viewState = { pixelsPerYear: 50, offsetX: 0 };
+        let timelineDisplayMode = 'axis';
         const colors = ['#6366f1', '#ec4899', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#64748b'];
         let saveTimeout;
         let authMode = 'login'; // 'login' | 'register'
@@ -982,13 +1115,16 @@
             document.getElementById('timeline-view').classList.remove('hidden');
             document.getElementById('timeline-title').innerText = timeline.name;
             const w = document.getElementById('viewport').clientWidth;
-            const startYear = timeline.events.length > 0 ? timeline.events[0].start : new Date().getFullYear();
+            const orderedEvents = getSortedTimelineEvents(timeline.events || []);
+            const startYear = orderedEvents.length > 0 ? orderedEvents[0].start : new Date().getFullYear();
             viewState.offsetX = (w / 2) - (startYear * viewState.pixelsPerYear);
-            renderTimeline();
+            setTimelineDisplayMode('axis');
         }
         function goToHub() {
             currentTimeline = null;
+            timelineDisplayMode = 'axis';
             if (document.fullscreenElement) document.exitFullscreen();
+            document.body.classList.remove('printing-timeline-list');
             document.getElementById('timeline-view').classList.add('hidden');
             document.getElementById('hub-view').classList.remove('hidden');
             renderHub();
@@ -1062,8 +1198,120 @@
             return Math.max(60, Math.min(preferred, maxAllowed));
         }
 
-        function renderTimeline() {
+        function escapeHTML(value) {
+            return String(value ?? '').replace(/[&<>'"]/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[char]));
+        }
+
+        function getSortedTimelineEvents(events) {
+            return (events || []).slice().sort((a, b) => {
+                const startDiff = (a.start || 0) - (b.start || 0);
+                if (startDiff !== 0) return startDiff;
+                return (a.end || a.start || 0) - (b.end || b.start || 0);
+            });
+        }
+
+        function getEventTypeLabel(ev) {
+            if (ev.end && Math.abs(ev.end - ev.start) > 0.002) return 'Intervalo';
+            return 'Evento puntual';
+        }
+
+        function renderTimelineList() {
             if (!currentTimeline) return;
+            const listView = document.getElementById('timeline-list-view');
+            const content = document.getElementById('timeline-list-content');
+            const heading = document.getElementById('timeline-list-heading');
+            const summary = document.getElementById('timeline-list-summary');
+            const printTitle = document.getElementById('timeline-list-print-title');
+            const printSubtitle = document.getElementById('timeline-list-print-subtitle');
+            const events = getSortedTimelineEvents(currentTimeline.events || []);
+            const title = currentTimeline.name || 'Eje cronológico';
+
+            heading.innerText = `${title} - vista lista`;
+            summary.innerText = events.length === 1 ? '1 evento ordenado cronológicamente.' : `${events.length} eventos ordenados cronológicamente.`;
+            printTitle.innerText = title;
+            printSubtitle.innerText = events.length === 1 ? '1 evento' : `${events.length} eventos`;
+            content.innerHTML = '';
+
+            if (events.length === 0) {
+                content.innerHTML = `<div class="text-center py-16 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl"><i class="fas fa-stream text-3xl mb-3"></i><p>Este eje está vacío.</p></div>`;
+                return;
+            }
+
+            events.forEach((ev, index) => {
+                const dateLabel = ev.displayDate || (ev.end ? `${ev.start.toFixed(0)} - ${ev.end.toFixed(0)}` : ev.start.toFixed(0));
+                const color = ev.color || '#6366f1';
+                const item = document.createElement('article');
+                item.className = 'timeline-list-item';
+                item.style.setProperty('--event-color', color);
+                item.innerHTML = `
+                    <div class="timeline-list-date">
+                        <div class="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">${String(index + 1).padStart(2, '0')}</div>
+                        <div><span class="timeline-list-dot"></span>${escapeHTML(dateLabel)}</div>
+                        <div class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">${getEventTypeLabel(ev)}</div>
+                    </div>
+                    <div class="min-w-0 flex gap-4">
+                        ${ev.img ? `<img src="${escapeHTML(ev.img)}" class="timeline-list-img" alt="">` : ''}
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-3">
+                                <h4 class="text-lg font-bold text-slate-800 dark:text-white break-words">${escapeHTML(ev.name || 'Sin título')}</h4>
+                                <button onclick="openEventModalById('${escapeHTML(ev.id)}')" class="list-edit-btn no-print text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 hover:bg-indigo-100 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 shrink-0" title="Editar evento">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                            ${ev.end ? `<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Duración representada desde ${escapeHTML(dateLabel.split(' - ')[0] || dateLabel)}${dateLabel.includes(' - ') ? ` hasta ${escapeHTML(dateLabel.split(' - ').slice(1).join(' - '))}` : ''}.</p>` : `<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Colocado cronológicamente en el eje como fecha puntual.</p>`}
+                        </div>
+                    </div>
+                `;
+                content.appendChild(item);
+            });
+        }
+
+        function setTimelineDisplayMode(mode) {
+            timelineDisplayMode = mode;
+            const isList = mode === 'list';
+            document.getElementById('viewport').classList.toggle('hidden', isList);
+            document.getElementById('timeline-list-view').classList.toggle('hidden', !isList);
+            document.getElementById('timeline-mode-icon').className = isList ? 'fas fa-stream' : 'fas fa-list';
+            document.getElementById('timeline-mode-text').innerText = isList ? 'Eje' : 'Lista';
+            document.getElementById('timeline-mode-btn').title = isList ? 'Ver como eje' : 'Ver como lista';
+            document.getElementById('zoom-level').parentElement.classList.toggle('opacity-40', isList);
+            document.getElementById('fullscreen-btn').classList.toggle('opacity-40', isList);
+            if (isList) renderTimelineList(); else renderTimeline();
+        }
+
+        function toggleTimelineListView() {
+            setTimelineDisplayMode(timelineDisplayMode === 'list' ? 'axis' : 'list');
+        }
+
+        function openEventModalById(id) {
+            if (!currentTimeline) return;
+            const ev = (currentTimeline.events || []).find(event => String(event.id) === String(id));
+            if (ev) openEventModal(ev);
+        }
+
+        function exportTimelineListToPDF() {
+            if (!currentTimeline) return;
+            const previousMode = timelineDisplayMode;
+            renderTimelineList();
+            document.getElementById('timeline-list-print-header').classList.remove('hidden');
+            document.body.classList.add('printing-timeline-list');
+            const cleanup = () => {
+                document.body.classList.remove('printing-timeline-list');
+                document.getElementById('timeline-list-print-header').classList.add('hidden');
+                setTimelineDisplayMode(previousMode);
+                window.removeEventListener('afterprint', cleanup);
+            };
+            window.addEventListener('afterprint', cleanup);
+            setTimeout(() => window.print(), 60);
+            setTimeout(() => {
+                if (document.body.classList.contains('printing-timeline-list')) cleanup();
+            }, 2000);
+        }
+
+        function renderTimeline() {
+            if (!currentTimeline || timelineDisplayMode === 'list') return;
             rulerLayer.innerHTML = ''; gridLayer.innerHTML = ''; eventsLayer.innerHTML = '';
             const events = currentTimeline.events;
             if (events.length === 0) eventsLayer.appendChild(emptyState);
@@ -1180,12 +1428,13 @@
             const isFileMode = document.getElementById('inp-img-url').classList.contains('hidden'); let img = ''; if (isFileMode) { img = document.getElementById('inp-img-base64').value; } else { img = document.getElementById('inp-img-url').value; }
             const evData = { id: id ? parseFloat(id) : Date.now(), name, start: startDec, end: endDec, color, img, displayDate: label, realDateStart: { y: sY, m: sM, d: sD }, realDateEnd: eY ? { y: eY, m: eM, d: eD } : null };
             if (id) { const idx = currentTimeline.events.findIndex(x => x.id == id); if (idx !== -1) { evData._top = currentTimeline.events[idx]._top; currentTimeline.events[idx] = evData; } } else { currentTimeline.events.push(evData); setTimeout(() => { const w = viewport.clientWidth; viewState.offsetX = (w/2) - (startDec * viewState.pixelsPerYear); renderTimeline(); }, 50); }
-            closeEventModal(); renderTimeline();
+            closeEventModal();
+            if (timelineDisplayMode === 'list') renderTimelineList(); else renderTimeline();
             saveToDisk();
         }
         
-        function deleteCurrentEvent() { const id = document.getElementById('inp-id').value; if(id && confirm("¿Borrar evento?")) { currentTimeline.events = currentTimeline.events.filter(e => e.id != id); closeEventModal(); renderTimeline(); saveToDisk(); } }
-        function changeZoom(factor) { const w = viewport.clientWidth; const centerYear = (w/2 - viewState.offsetX) / viewState.pixelsPerYear; viewState.pixelsPerYear *= factor; if(viewState.pixelsPerYear < 5) viewState.pixelsPerYear = 5; if(viewState.pixelsPerYear > 300) viewState.pixelsPerYear = 300; viewState.offsetX = (w/2) - (centerYear * viewState.pixelsPerYear); renderTimeline(); document.getElementById('zoom-level').innerText = Math.round(viewState.pixelsPerYear) + '%'; }
+        function deleteCurrentEvent() { const id = document.getElementById('inp-id').value; if(id && confirm("¿Borrar evento?")) { currentTimeline.events = currentTimeline.events.filter(e => e.id != id); closeEventModal(); if (timelineDisplayMode === 'list') renderTimelineList(); else renderTimeline(); saveToDisk(); } }
+        function changeZoom(factor) { if (timelineDisplayMode === 'list') return; const w = viewport.clientWidth; const centerYear = (w/2 - viewState.offsetX) / viewState.pixelsPerYear; viewState.pixelsPerYear *= factor; if(viewState.pixelsPerYear < 5) viewState.pixelsPerYear = 5; if(viewState.pixelsPerYear > 300) viewState.pixelsPerYear = 300; viewState.offsetX = (w/2) - (centerYear * viewState.pixelsPerYear); renderTimeline(); document.getElementById('zoom-level').innerText = Math.round(viewState.pixelsPerYear) + '%'; }
         function toggleTheme() { document.documentElement.classList.toggle('dark'); }
 
         const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -1453,7 +1702,7 @@
             document.getElementById('learn-progress').innerText = `${learnSession.total}/${learnSession.total}`;
         }
 
-        window.onresize = renderTimeline;
+        window.onresize = () => { if (timelineDisplayMode === 'list') renderTimelineList(); else renderTimeline(); };
     </script>
 </body>
 </html>
